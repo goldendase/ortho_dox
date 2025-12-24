@@ -9,6 +9,8 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from api.config import settings
 from api.db import MongoDB
@@ -109,6 +111,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Auth middleware
+class HmogAuthMiddleware(BaseHTTPMiddleware):
+    """Simple secret-based authentication middleware."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip auth if no secret configured (dev mode)
+        if not settings.hmog_secret:
+            return await call_next(request)
+
+        # Allow CORS preflight requests (browsers send OPTIONS without custom headers)
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
+        # Allow health checks without auth
+        if request.url.path == "/health":
+            return await call_next(request)
+
+        # Check the secret header
+        provided_secret = request.headers.get("hmog-secret")
+        if provided_secret != settings.hmog_secret:
+            return Response(content="Unauthorized", status_code=401)
+
+        return await call_next(request)
+
+
+app.add_middleware(HmogAuthMiddleware)
 
 
 # Exception handlers

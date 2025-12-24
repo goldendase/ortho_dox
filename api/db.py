@@ -15,7 +15,7 @@ class MongoDB:
     @classmethod
     async def connect(cls):
         """Connect to MongoDB."""
-        cls.client = AsyncIOMotorClient(settings.mongodb_uri)
+        cls.client = AsyncIOMotorClient(settings.mongo_uri)
         cls.db_dox = cls.client[settings.db_name_dox]
         cls.db_raw = cls.client[settings.db_name_raw]
 

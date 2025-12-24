@@ -8,7 +8,7 @@ import type { PageServerLoad } from './$types';
 import { books, ApiError } from '$lib/api';
 import { error } from '@sveltejs/kit';
 
-export const load: PageServerLoad = async ({ params }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
 	const { book, chapter: chapterStr } = params;
 	const chapter = parseInt(chapterStr, 10);
 
@@ -17,7 +17,12 @@ export const load: PageServerLoad = async ({ params }) => {
 	}
 
 	try {
-		const chapterData = await books.getChapterPassages(book, chapter, 'annotations');
+		const chapterData = await books.getChapterPassages(
+			book,
+			chapter,
+			'annotations',
+			{ authSecret: locals.authSecret ?? undefined }
+		);
 
 		return {
 			chapter: chapterData

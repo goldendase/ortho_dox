@@ -1,0 +1,27 @@
+# Dependencies (will be installed fresh)
+node_modules/
+
+# Build output (will be built fresh)
+build/
+.svelte-kit/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docs
+*.md
+
+# Railway/Docker
+railway.toml
+Dockerfile
+.dockerignore
+
+# Claude
+.claude/

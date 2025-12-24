@@ -6,8 +6,10 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import '$styles/app.css';
-	import { ui } from '$lib/stores';
+	import { ui, auth } from '$lib/stores';
 	import Sheet from '$lib/components/ui/Sheet.svelte';
 	import Header from '$lib/components/navigation/Header.svelte';
 	import SidePanel from '$lib/components/SidePanel.svelte';
@@ -17,7 +19,17 @@
 	// Track if we're on mobile (for conditional sheet rendering)
 	let isMobile = $state(false);
 
+	// Check if we're on the auth page (hide side panel, full-width layout)
+	let isAuthPage = $derived($page.url.pathname === '/auth');
+
+	// Check authentication on mount
 	onMount(() => {
+		// Auth guard: redirect to /auth if not authenticated
+		// Skip if already on /auth to avoid redirect loop
+		if (!auth.isAuthenticated && $page.url.pathname !== '/auth') {
+			goto('/auth', { replaceState: true });
+		}
+
 		const mediaQuery = window.matchMedia('(max-width: 768px)');
 		isMobile = mediaQuery.matches;
 
@@ -33,19 +45,21 @@
 <div class="app-layout">
 	<Header books={data?.books ?? []} />
 
-	<main class="app-main">
+	<main class="app-main" class:full-width={isAuthPage}>
 		<div class="reader-pane">
 			{@render children()}
 		</div>
 
-		<!-- Desktop: Side panel always visible in sidebar -->
-		<aside class="sidebar-pane desktop-only">
-			<SidePanel />
-		</aside>
+		<!-- Desktop: Side panel always visible in sidebar (hidden on auth page) -->
+		{#if !isAuthPage}
+			<aside class="sidebar-pane desktop-only">
+				<SidePanel />
+			</aside>
+		{/if}
 	</main>
 
-	<!-- Side panel sheet (mobile only) -->
-	{#if isMobile}
+	<!-- Side panel sheet (mobile only, hidden on auth page) -->
+	{#if isMobile && !isAuthPage}
 		<Sheet bind:open={ui.sidePanelOpen}>
 			<SidePanel />
 		</Sheet>
@@ -66,6 +80,10 @@
 		grid-template-columns: 3fr 2fr;
 		min-height: 0; /* Allow grid item to shrink */
 		overflow: hidden;
+	}
+
+	.app-main.full-width {
+		grid-template-columns: 1fr;
 	}
 
 	.reader-pane {
