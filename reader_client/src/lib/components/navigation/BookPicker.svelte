@@ -65,10 +65,16 @@
 		selectedBook = null;
 	}
 
+	let loadError = $state<string | null>(null);
+
 	async function selectBook(book: Book) {
 		isLoadingBook = true;
+		loadError = null;
 		try {
 			selectedBook = await booksApi.get(book.id);
+		} catch (err) {
+			console.error('Failed to load book:', err);
+			loadError = 'Failed to load chapters. Check your connection.';
 		} finally {
 			isLoadingBook = false;
 		}
@@ -132,22 +138,29 @@
 			</div>
 		{:else if !selectedBook}
 			<!-- Book list -->
-			<ul class="book-list">
-				{#each testament === 'old' ? oldTestament : newTestament as book (book.id)}
-					<li>
-						<button
-							class="book-item touch-target"
-							onclick={() => selectBook(book)}
-						>
-							<span class="book-name">{book.name}</span>
-							<span class="book-chapters text-muted">
-								{book.chapter_count} ch
-							</span>
-							<Icon name="chevron-right" size={16} class="text-muted" />
-						</button>
-					</li>
-				{/each}
-			</ul>
+			{#if loadError}
+				<div class="error-message">{loadError}</div>
+			{/if}
+			{#if isLoadingBook}
+				<div class="loading">Loading chapters...</div>
+			{:else}
+				<ul class="book-list">
+					{#each testament === 'old' ? oldTestament : newTestament as book (book.id)}
+						<li>
+							<button
+								class="book-item touch-target"
+								onclick={() => selectBook(book)}
+							>
+								<span class="book-name">{book.name}</span>
+								<span class="book-chapters text-muted">
+									{book.chapter_count} ch
+								</span>
+								<Icon name="chevron-right" size={16} class="text-muted" />
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		{:else}
 			<!-- Chapter grid -->
 			{#if isLoadingBook}
@@ -263,6 +276,7 @@
 		padding: var(--space-3) var(--space-2);
 		border-radius: var(--radius-md);
 		transition: background var(--transition-fast);
+		touch-action: manipulation;
 	}
 
 	.book-item:hover {
@@ -318,5 +332,15 @@
 		text-align: center;
 		color: var(--color-text-muted);
 		padding: var(--space-8);
+	}
+
+	.error-message {
+		padding: var(--space-3) var(--space-4);
+		margin-bottom: var(--space-3);
+		background: rgba(239, 68, 68, 0.1);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		border-radius: var(--radius-md);
+		color: #ef4444;
+		font-size: var(--font-sm);
 	}
 </style>
