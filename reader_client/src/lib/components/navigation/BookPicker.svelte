@@ -7,7 +7,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import type { Book, BookDetail } from '$lib/api';
-	import { books as booksApi } from '$lib/api';
+	import { books as booksApi, api } from '$lib/api';
 	import { reader } from '$lib/stores';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
@@ -74,7 +74,8 @@
 			selectedBook = await booksApi.get(book.id);
 		} catch (err) {
 			console.error('Failed to load book:', err);
-			loadError = err instanceof Error ? err.message : 'Failed to load chapters';
+			const msg = err instanceof Error ? err.message : 'Failed to load chapters';
+			loadError = `${msg} → ${api.baseUrl}/books/${book.id}`;
 		} finally {
 			isLoadingBook = false;
 		}

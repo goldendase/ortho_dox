@@ -118,7 +118,7 @@ async function request<T>(
 
 	const { authSecret, ...fetchOptions } = options ?? {};
 
-	const response = await fetch(url, {
+	const response = await fetch(url.href, {
 		headers: {
 			...buildAuthHeaders(authSecret),
 			...fetchOptions?.headers
@@ -147,7 +147,7 @@ async function request<T>(
 async function post<T, B>(path: string, body: B): Promise<T> {
 	const url = new URL(path, API_BASE);
 
-	const response = await fetch(url, {
+	const response = await fetch(url.href, {
 		method: 'POST',
 		headers: buildAuthHeaders(),
 		body: JSON.stringify(body)
