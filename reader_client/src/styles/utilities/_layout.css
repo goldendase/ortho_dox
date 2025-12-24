@@ -1,0 +1,93 @@
+/*
+ * Layout Utilities
+ */
+
+/* ─────────────────────────────────────────────────────
+   Responsive visibility
+   ───────────────────────────────────────────────────── */
+
+.desktop-only {
+	display: none;
+}
+
+.mobile-only {
+	display: block;
+}
+
+@media (min-width: 768px) {
+	.desktop-only {
+		display: block;
+	}
+
+	.mobile-only {
+		display: none;
+	}
+}
+
+/* Flex variants */
+.desktop-only-flex {
+	display: none;
+}
+
+.mobile-only-flex {
+	display: flex;
+}
+
+@media (min-width: 768px) {
+	.desktop-only-flex {
+		display: flex;
+	}
+
+	.mobile-only-flex {
+		display: none;
+	}
+}
+
+/* ─────────────────────────────────────────────────────
+   Common layout patterns
+   ───────────────────────────────────────────────────── */
+
+.container {
+	width: 100%;
+	max-width: var(--content-max-width);
+	margin-inline: auto;
+	padding-inline: var(--space-4);
+}
+
+.flex-center {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.flex-between {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.stack {
+	display: flex;
+	flex-direction: column;
+}
+
+.stack-sm {
+	gap: var(--space-2);
+}
+
+.stack-md {
+	gap: var(--space-4);
+}
+
+.stack-lg {
+	gap: var(--space-6);
+}
+
+/* ─────────────────────────────────────────────────────
+   Touch target enforcement
+   ───────────────────────────────────────────────────── */
+
+.touch-target {
+	min-width: var(--touch-target-min);
+	min-height: var(--touch-target-min);
+}

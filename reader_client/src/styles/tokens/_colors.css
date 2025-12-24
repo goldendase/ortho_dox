@@ -1,0 +1,63 @@
+/*
+ * Color Tokens
+ *
+ * Byzantine Orthodox palette - deep, contemplative tones
+ * inspired by iconography and liturgical vestments.
+ *
+ * To change the theme, edit values here. All components
+ * reference these variables.
+ */
+
+:root {
+	/* ─────────────────────────────────────────────────────
+	   Background Scale (darkest to lightest)
+	   ───────────────────────────────────────────────────── */
+	--color-bg-base: #0d0b0a;        /* True background */
+	--color-bg-surface: #171412;     /* Cards, panels */
+	--color-bg-elevated: #211d1a;    /* Modals, dropdowns */
+	--color-bg-hover: #2a2522;       /* Hover states */
+
+	/* ─────────────────────────────────────────────────────
+	   Text Scale (brightest to dimmest)
+	   ───────────────────────────────────────────────────── */
+	--color-text-primary: #ece5db;   /* Body text */
+	--color-text-secondary: #b5a99a; /* Supporting text */
+	--color-text-muted: #6d6259;     /* Disabled, hints */
+
+	/* ─────────────────────────────────────────────────────
+	   Accent Colors
+	   ───────────────────────────────────────────────────── */
+	/* Gold - halos, iconostasis gilding */
+	--color-gold: #c9a227;
+	--color-gold-bright: #e3bb3d;
+	--color-gold-dim: #8a7019;
+	--color-gold-muted: #4a3d12;
+
+	/* Burgundy - liturgical vestments */
+	--color-burgundy: #722f37;
+	--color-burgundy-light: #934048;
+	--color-burgundy-dark: #4d1f25;
+
+	/* Deep Blue - Theotokos, night vigil */
+	--color-navy: #1a2744;
+	--color-navy-light: #283a5c;
+
+	/* ─────────────────────────────────────────────────────
+	   Semantic Colors
+	   ───────────────────────────────────────────────────── */
+	--color-accent: var(--color-gold);
+	--color-accent-hover: var(--color-gold-bright);
+
+	/* Annotation types */
+	--color-annotation-study: var(--color-gold);
+	--color-annotation-crossref: #5b8a72;
+	--color-annotation-variant: #7a6b8a;
+	--color-annotation-liturgical: var(--color-burgundy-light);
+	--color-annotation-article: #6b8a9a;
+
+	/* UI states */
+	--color-border: #2a2522;
+	--color-border-focus: var(--color-gold-dim);
+	--color-error: #c44;
+	--color-success: #4a7;
+}

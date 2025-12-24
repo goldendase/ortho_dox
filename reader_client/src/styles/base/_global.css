@@ -1,0 +1,112 @@
+/*
+ * Global Styles
+ * Applied to html, body, and base elements
+ */
+
+html {
+	font-size: 100%;
+	scroll-behavior: smooth;
+}
+
+body {
+	font-family: var(--font-body);
+	font-size: var(--font-base);
+	font-weight: var(--font-normal);
+	line-height: var(--leading-normal);
+	color: var(--color-text-primary);
+	background-color: var(--color-bg-base);
+	min-height: 100dvh;
+}
+
+/* ─────────────────────────────────────────────────────
+   Typography defaults
+   ───────────────────────────────────────────────────── */
+
+h1,
+h2,
+h3 {
+	font-weight: var(--font-medium);
+	line-height: var(--leading-tight);
+	color: var(--color-text-primary);
+}
+
+h1 {
+	font-size: var(--font-3xl);
+}
+
+h2 {
+	font-size: var(--font-2xl);
+}
+
+h3 {
+	font-size: var(--font-xl);
+}
+
+/* ─────────────────────────────────────────────────────
+   Links and interactive elements
+   ───────────────────────────────────────────────────── */
+
+a:hover {
+	color: var(--color-accent);
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-border-focus);
+	outline-offset: 2px;
+}
+
+/* ─────────────────────────────────────────────────────
+   Scripture text rendering
+   (content from API contains <i> and <b> tags)
+   ───────────────────────────────────────────────────── */
+
+.scripture-text i {
+	font-style: italic;
+	color: var(--color-text-secondary);
+}
+
+.scripture-text b {
+	font-weight: var(--font-semibold);
+}
+
+/* Preserve poetry line breaks */
+.scripture-text {
+	white-space: pre-wrap;
+}
+
+/* ─────────────────────────────────────────────────────
+   Scrollbar styling (dark theme)
+   ───────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-bg-base);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-bg-hover);
+	border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-border);
+}
+
+/* Firefox */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-bg-hover) var(--color-bg-base);
+}
+
+/* ─────────────────────────────────────────────────────
+   Selection
+   ───────────────────────────────────────────────────── */
+
+::selection {
+	background-color: var(--color-gold-muted);
+	color: var(--color-text-primary);
+}

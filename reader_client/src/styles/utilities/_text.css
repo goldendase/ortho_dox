@@ -1,0 +1,131 @@
+/*
+ * Text Utilities
+ */
+
+/* ─────────────────────────────────────────────────────
+   Colors
+   ───────────────────────────────────────────────────── */
+
+.text-primary {
+	color: var(--color-text-primary);
+}
+
+.text-secondary {
+	color: var(--color-text-secondary);
+}
+
+.text-muted {
+	color: var(--color-text-muted);
+}
+
+.text-gold {
+	color: var(--color-gold);
+}
+
+.text-burgundy {
+	color: var(--color-burgundy-light);
+}
+
+/* ─────────────────────────────────────────────────────
+   Font families
+   ───────────────────────────────────────────────────── */
+
+.font-body {
+	font-family: var(--font-body);
+}
+
+.font-ui {
+	font-family: var(--font-ui);
+}
+
+/* ─────────────────────────────────────────────────────
+   Sizes
+   ───────────────────────────────────────────────────── */
+
+.text-xs {
+	font-size: var(--font-xs);
+}
+
+.text-sm {
+	font-size: var(--font-sm);
+}
+
+.text-base {
+	font-size: var(--font-base);
+}
+
+.text-lg {
+	font-size: var(--font-lg);
+}
+
+.text-xl {
+	font-size: var(--font-xl);
+}
+
+/* ─────────────────────────────────────────────────────
+   Weights
+   ───────────────────────────────────────────────────── */
+
+.font-normal {
+	font-weight: var(--font-normal);
+}
+
+.font-medium {
+	font-weight: var(--font-medium);
+}
+
+.font-semibold {
+	font-weight: var(--font-semibold);
+}
+
+/* ─────────────────────────────────────────────────────
+   Line heights
+   ───────────────────────────────────────────────────── */
+
+.leading-tight {
+	line-height: var(--leading-tight);
+}
+
+.leading-snug {
+	line-height: var(--leading-snug);
+}
+
+.leading-normal {
+	line-height: var(--leading-normal);
+}
+
+.leading-relaxed {
+	line-height: var(--leading-relaxed);
+}
+
+/* ─────────────────────────────────────────────────────
+   Alignment & overflow
+   ───────────────────────────────────────────────────── */
+
+.text-center {
+	text-align: center;
+}
+
+.text-right {
+	text-align: right;
+}
+
+.truncate {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.line-clamp-2 {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.line-clamp-3 {
+	display: -webkit-box;
+	-webkit-line-clamp: 3;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}

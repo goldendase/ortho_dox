@@ -1,0 +1,14 @@
+/*
+ * Orthodox Reader - Main Stylesheet
+ *
+ * Import order matters:
+ * 1. Tokens (CSS custom properties)
+ * 2. Base styles (reset, global)
+ * 3. Utilities (helper classes)
+ *
+ * Component styles live in their .svelte files
+ */
+
+@import './tokens/_index.css';
+@import './base/_index.css';
+@import './utilities/_index.css';
