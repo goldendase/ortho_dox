@@ -74,7 +74,7 @@
 			selectedBook = await booksApi.get(book.id);
 		} catch (err) {
 			console.error('Failed to load book:', err);
-			loadError = 'Failed to load chapters. Check your connection.';
+			loadError = err instanceof Error ? err.message : 'Failed to load chapters';
 		} finally {
 			isLoadingBook = false;
 		}
