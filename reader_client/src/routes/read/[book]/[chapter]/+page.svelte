@@ -26,14 +26,37 @@
 	});
 
 	// Scroll to verse if hash present (e.g., #v15)
+	// Also auto-select if 'select' query param present (from chat annotation links)
 	onMount(() => {
 		const hash = $page.url.hash;
-		if (hash.startsWith('#v')) {
-			const verseNum = hash.slice(2);
+		const selectParam = $page.url.searchParams.get('select');
+
+		// Determine which verse to scroll to (hash takes precedence)
+		const verseNum = hash.startsWith('#v')
+			? hash.slice(2)
+			: selectParam;
+
+		if (verseNum) {
 			const verseEl = document.getElementById(`v${verseNum}`);
 			if (verseEl) {
 				verseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 				reader.scrollToVerse(parseInt(verseNum, 10));
+
+				// If 'select' param present, also select the verse for chat context
+				if (selectParam) {
+					const verse = parseInt(selectParam, 10);
+					const passage = data.chapter.passages.find((p) => p.verse === verse);
+					if (passage) {
+						reader.selectVerse({
+							book: passage.book_id,
+							bookName: data.chapter.book_name,
+							chapter: passage.chapter,
+							verse: passage.verse,
+							passageId: passage.id,
+							text: passage.text.replace(/<[^>]*>/g, '').slice(0, 150)
+						});
+					}
+				}
 			}
 		}
 	});

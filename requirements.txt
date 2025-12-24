@@ -9,3 +9,8 @@ uvicorn[standard]>=0.32.0
 motor>=3.6.0
 pydantic>=2.10.0
 pydantic-settings>=2.6.0
+python-dotenv>=1.0.0
+
+# Chat/LLM dependencies
+dspy>=3.0.0
+httpx>=0.28.0
