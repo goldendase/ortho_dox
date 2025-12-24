@@ -5,6 +5,7 @@
  */
 
 import { browser } from '$app/environment';
+import { env } from '$env/dynamic/public';
 import { goto } from '$app/navigation';
 import type { ApiErrorResponse } from './types';
 
@@ -12,9 +13,12 @@ import type { ApiErrorResponse } from './types';
 // Configuration
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE = browser
-	? (import.meta.env.VITE_API_URL ?? 'http://localhost:8080')
-	: (process.env.API_URL ?? 'http://localhost:8080');
+function getApiBase(): string {
+	if (browser) {
+		return env.PUBLIC_API_URL ?? 'http://localhost:8080';
+	}
+	return process.env.API_URL ?? 'http://localhost:8080';
+}
 
 const AUTH_STORAGE_KEY = 'orthodox_reader_secret';
 const AUTH_HEADER = 'hmog-secret';
@@ -105,7 +109,7 @@ async function request<T>(
 	params?: QueryParams,
 	options?: ApiRequestOptions
 ): Promise<T> {
-	const url = new URL(path, API_BASE);
+	const url = new URL(path, getApiBase());
 
 	// Add query parameters, filtering out undefined values
 	if (params) {
@@ -145,7 +149,7 @@ async function request<T>(
 }
 
 async function post<T, B>(path: string, body: B): Promise<T> {
-	const url = new URL(path, API_BASE);
+	const url = new URL(path, getApiBase());
 
 	const response = await fetch(url.href, {
 		method: 'POST',
@@ -178,5 +182,7 @@ async function post<T, B>(path: string, body: B): Promise<T> {
 export const api = {
 	get: request,
 	post,
-	baseUrl: API_BASE
+	get baseUrl() {
+		return getApiBase();
+	}
 };
