@@ -1,1 +1,0 @@
-# Orthodox Study Bible Parser
