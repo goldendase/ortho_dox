@@ -22,7 +22,8 @@ export {
 	getTocNodeTitle,
 	findFirstLeafNode,
 	flattenTocLeaves,
-	type LibraryPosition
+	type LibraryPosition,
+	type SelectedParagraph
 } from './library.svelte';
 export {
 	preferences,

@@ -22,7 +22,16 @@ export interface LibraryPosition {
 	anchor?: string; // Paragraph anchor e.g. "od-lib-p5"
 }
 
+export interface SelectedParagraph {
+	workId: string;
+	nodeId: string;
+	nodeTitle: string; // For display when user navigates away
+	index: number; // Paragraph number (1-based, from od-lib-p1)
+	text: string; // First ~150 chars for context
+}
+
 const STORAGE_KEY = 'orthodox_library_position';
+const SELECTED_PARAGRAPH_KEY = 'orthodox_library_selected_paragraph';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistence
@@ -47,6 +56,25 @@ function savePosition(pos: LibraryPosition | null): void {
 	}
 }
 
+function loadSelectedParagraph(): SelectedParagraph | null {
+	if (!browser) return null;
+	try {
+		const stored = localStorage.getItem(SELECTED_PARAGRAPH_KEY);
+		return stored ? JSON.parse(stored) : null;
+	} catch {
+		return null;
+	}
+}
+
+function saveSelectedParagraph(para: SelectedParagraph | null): void {
+	if (!browser) return;
+	if (para) {
+		localStorage.setItem(SELECTED_PARAGRAPH_KEY, JSON.stringify(para));
+	} else {
+		localStorage.removeItem(SELECTED_PARAGRAPH_KEY);
+	}
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Store Class
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +84,7 @@ class LibraryStore {
 	#currentWork = $state<LibraryWork | null>(null);
 	#toc = $state<TocNode | null>(null);
 	#currentNode = $state<LibraryNodeLeaf | null>(null);
+	#selectedParagraph = $state<SelectedParagraph | null>(loadSelectedParagraph());
 
 	// TOC drawer state
 	#tocOpen = $state(false);
@@ -84,12 +113,19 @@ class LibraryStore {
 		return this.#tocOpen;
 	}
 
+	/** Currently selected paragraph for chat context */
+	get selectedParagraph() {
+		return this.#selectedParagraph;
+	}
+
 	// ─────────────────────────────────────────────────────────────────────────
 	// Navigation
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
 	 * Set current position (called when navigating to a library page)
+	 * NOTE: Cannot clear selectedParagraph here - causes infinite loops
+	 * because this is called from $effect. Display layer filters stale selections.
 	 */
 	setPosition(pos: LibraryPosition): void {
 		this.#position = pos;
@@ -144,6 +180,26 @@ class LibraryStore {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
+	// Paragraph Selection (for chat context)
+	// ─────────────────────────────────────────────────────────────────────────
+
+	/**
+	 * Select a paragraph for chat context
+	 */
+	selectParagraph(para: SelectedParagraph): void {
+		this.#selectedParagraph = para;
+		saveSelectedParagraph(para);
+	}
+
+	/**
+	 * Clear selected paragraph (reverts to node-level context for chat)
+	 */
+	clearSelectedParagraph(): void {
+		this.#selectedParagraph = null;
+		saveSelectedParagraph(null);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────
 	// Reset
 	// ─────────────────────────────────────────────────────────────────────────
 
@@ -152,9 +208,11 @@ class LibraryStore {
 		this.#currentWork = null;
 		this.#toc = null;
 		this.#currentNode = null;
+		this.#selectedParagraph = null;
 		this.#tocOpen = false;
 		if (browser) {
 			localStorage.removeItem(STORAGE_KEY);
+			localStorage.removeItem(SELECTED_PARAGRAPH_KEY);
 		}
 	}
 

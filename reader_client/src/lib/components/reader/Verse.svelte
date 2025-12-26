@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import type { PassageWithAnnotations, StudyNote, LiturgicalNote, VariantNote } from '$lib/api';
-	import { ui, favorites, reader } from '$lib/stores';
+	import { ui, favorites, reader, libraryStore } from '$lib/stores';
 	import AnnotationMarker from './AnnotationMarker.svelte';
 	import FavoriteButton from '$lib/components/ui/FavoriteButton.svelte';
 
@@ -71,6 +71,9 @@
 		if (isSelected) {
 			reader.clearSelectedVerse();
 		} else {
+			// Clear library paragraph selection (mutually exclusive)
+			libraryStore.clearSelectedParagraph();
+
 			reader.selectVerse({
 				book: passage.book_id,
 				bookName,

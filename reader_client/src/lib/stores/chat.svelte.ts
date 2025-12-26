@@ -11,6 +11,7 @@
 
 import { browser } from '$app/environment';
 import { reader, type ReaderPosition } from './reader.svelte';
+import { libraryStore } from './library.svelte';
 import { sendChatMessage } from '$lib/api';
 import type { ChatContext as ApiChatContext, ChatMessage as ApiChatMessage } from '$lib/api';
 
@@ -110,20 +111,32 @@ class ChatStore {
 	error = $state<string | null>(null);
 
 	/**
-	 * Build the API context based on selected verse or current position
-	 * Priority: selected verse > current chapter > null
+	 * Build the API context based on reading position
+	 * Priority: OSB selected verse > Library selected paragraph > Library node > OSB chapter > null
 	 */
 	get currentContext(): ApiChatContext {
-		// If a specific verse is selected, use passage_id format
-		const selected = reader.selectedVerse;
-		if (selected) {
-			return { passage_id: selected.passageId };
+		// OSB: If a specific verse is selected, use passage_id format
+		const selectedVerse = reader.selectedVerse;
+		if (selectedVerse) {
+			return { passage_id: selectedVerse.passageId };
 		}
 
-		// Otherwise use book_id + chapter format
-		const pos = reader.position;
-		if (pos) {
-			return { book_id: pos.book, chapter: pos.chapter };
+		// Library: If a paragraph is selected, use it (persists across navigation)
+		const selectedParagraph = libraryStore.selectedParagraph;
+		if (selectedParagraph) {
+			return { work_id: selectedParagraph.workId, node_id: selectedParagraph.nodeId };
+		}
+
+		// Library: If reading a library node (no paragraph selected)
+		const libPos = libraryStore.position;
+		if (libPos) {
+			return { work_id: libPos.work, node_id: libPos.node };
+		}
+
+		// OSB: If reading a chapter (no verse selected)
+		const osbPos = reader.position;
+		if (osbPos) {
+			return { book_id: osbPos.book, chapter: osbPos.chapter };
 		}
 
 		// No context

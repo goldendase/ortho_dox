@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { ui, favorites, chat, reader, formatPosition, preferences } from '$lib/stores';
+	import { ui, favorites, chat, reader, formatPosition, preferences, libraryStore } from '$lib/stores';
 	import { passages } from '$lib/api';
 	import type { StudyNote, ScriptureRef, PatristicCitation } from '$lib/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
@@ -71,6 +71,7 @@
 	function handleClearChat() {
 		chat.clearSession();
 		reader.clearSelectedVerse();
+		libraryStore.clearSelectedParagraph();
 	}
 
 	// Check if current content is favorited (for passages)
@@ -280,7 +281,7 @@
 		<div class="chat-container">
 			<!-- Chat header with context and new chat button -->
 			<div class="chat-header">
-				<!-- Context badge - shows selected verse or chapter -->
+				<!-- Context badge - shows selected verse/paragraph or reading position -->
 				{#if reader.selectedVerse}
 					<div class="context-badge context-badge-verse">
 						<div class="context-header">
@@ -300,6 +301,34 @@
 						<p class="context-preview text-muted">
 							{reader.selectedVerse.text}
 						</p>
+					</div>
+				{:else if libraryStore.selectedParagraph}
+					<div class="context-badge context-badge-verse">
+						<div class="context-header">
+							<Icon name="bookmark" size={14} />
+							<span class="context-ref font-ui">
+								{libraryStore.selectedParagraph.nodeTitle} · ¶{libraryStore.selectedParagraph.index}
+							</span>
+							<button
+								class="context-clear"
+								onclick={() => libraryStore.clearSelectedParagraph()}
+								aria-label="Clear selected paragraph"
+								title="Clear paragraph selection"
+							>
+								<Icon name="x" size={14} />
+							</button>
+						</div>
+						<p class="context-preview text-muted">
+							{libraryStore.selectedParagraph.text}...
+						</p>
+					</div>
+				{:else if libraryStore.position}
+					<div class="context-badge">
+						<Icon name="book" size={14} />
+						<span class="context-text font-ui">
+							{libraryStore.position.nodeTitle || libraryStore.position.workTitle || 'Library'}
+						</span>
+						<span class="context-hint text-muted">Click a paragraph to focus discussion</span>
 					</div>
 				{:else if reader.position}
 					<div class="context-badge">

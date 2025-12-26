@@ -12,7 +12,7 @@
 	import type { LibraryNodeLeaf, LibraryComponents, PassageWithAnnotations } from '$lib/api';
 	import { books } from '$lib/api';
 	import FootnoteMarker from './FootnoteMarker.svelte';
-	import { ui } from '$lib/stores';
+	import { ui, libraryStore, reader } from '$lib/stores';
 	import { parseScriptureRef, formatScriptureDisplay, type ScriptureRef } from '$lib/utils/chatAnnotations';
 
 	interface Props {
@@ -172,6 +172,56 @@
 	// Track loading state for scripture refs
 	let loadingScriptureRef = $state<string | null>(null);
 
+	// Track currently selected paragraph element (for class manipulation)
+	let currentSelectedEl: HTMLElement | null = null;
+
+	// Handle paragraph selection - ALL logic is here, no reactive effects
+	function handleParagraphClick(paragraphEl: HTMLElement) {
+		const id = paragraphEl.id;
+		const match = id.match(/^od-lib-p(\d+)$/);
+		if (!match) return;
+
+		const paragraphIndex = parseInt(match[1], 10);
+
+		// Check if clicking the same paragraph (toggle off)
+		const selected = libraryStore.selectedParagraph;
+		const isAlreadySelected =
+			selected !== null &&
+			selected.workId === node.work_id &&
+			selected.nodeId === node.id &&
+			selected.index === paragraphIndex;
+
+		// Remove .selected from previous element
+		if (currentSelectedEl) {
+			currentSelectedEl.classList.remove('selected');
+			currentSelectedEl = null;
+		}
+
+		if (isAlreadySelected) {
+			// Deselect
+			libraryStore.clearSelectedParagraph();
+		} else {
+			// Select new paragraph
+			paragraphEl.classList.add('selected');
+			currentSelectedEl = paragraphEl;
+
+			// Clear OSB verse selection (mutually exclusive)
+			reader.clearSelectedVerse();
+
+			const text = paragraphEl.textContent?.slice(0, 150) ?? '';
+			const nodeTitle = node.title || libraryStore.position?.nodeTitle || node.id;
+			libraryStore.selectParagraph({
+				workId: node.work_id,
+				nodeId: node.id,
+				nodeTitle,
+				index: paragraphIndex,
+				text
+			});
+
+			ui.openChat();
+		}
+	}
+
 	// Handle footnote and scripture ref clicks via event delegation
 	async function handleContentClick(e: MouseEvent) {
 		const target = e.target as HTMLElement;
@@ -225,6 +275,14 @@
 				loadingScriptureRef = null;
 				target.classList.remove('loading');
 			}
+			return;
+		}
+
+		// Check if clicked on a paragraph (or inside one)
+		// Find closest paragraph with od-lib-p* id
+		const paragraphEl = target.closest('[id^="od-lib-p"]') as HTMLElement | null;
+		if (paragraphEl) {
+			handleParagraphClick(paragraphEl);
 		}
 	}
 </script>
@@ -263,6 +321,25 @@
 
 	.content-body {
 		/* Content styles handled by LibraryReader global styles */
+	}
+
+	/* Selectable paragraphs */
+	.content-body :global(p[id^="od-lib-p"]) {
+		cursor: pointer;
+		padding-left: var(--space-2);
+		margin-left: calc(-1 * var(--space-2));
+		border-left: 2px solid transparent;
+		border-radius: var(--radius-sm);
+		transition: border-color var(--transition-fast), background var(--transition-fast);
+	}
+
+	.content-body :global(p[id^="od-lib-p"]:hover) {
+		background: rgba(201, 162, 39, 0.03);
+	}
+
+	.content-body :global(p[id^="od-lib-p"].selected) {
+		border-left-color: var(--color-gold);
+		background: rgba(201, 162, 39, 0.08);
 	}
 
 	/* Footnote placeholders - will be enhanced with JS */
