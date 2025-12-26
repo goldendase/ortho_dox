@@ -11,12 +11,12 @@ import type { ChatRequest, ChatResponse, ChatContext, ChatMessage } from './type
  * Send a chat message and get a response
  *
  * @param messages - Full conversation history (user manages this)
- * @param context - Current reading position context
+ * @param context - Current reading position context (null for general questions)
  * @returns The assistant's response
  */
 export async function sendChatMessage(
 	messages: ChatMessage[],
-	context: ChatContext
+	context: ChatContext | null
 ): Promise<ChatResponse> {
 	const request: ChatRequest = { messages, context };
 	return api.post<ChatResponse, ChatRequest>('/chat', request);

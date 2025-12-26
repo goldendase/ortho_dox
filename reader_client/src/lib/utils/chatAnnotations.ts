@@ -310,3 +310,38 @@ export function getAnnotationDisplayText(annotation: ChatAnnotation): string {
 			return annotation.value;
 	}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scripture Marker Processing (for library content/notes)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Escape HTML special characters
+ */
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#039;');
+}
+
+/**
+ * Process scripture markers in text, converting them to clickable links.
+ * Format: [SCRIPTURE[book:chapter:verse]] or [SCRIPTURE[book:chapter:start-end]]
+ *
+ * Returns HTML string with scripture refs as anchor tags with data attributes.
+ */
+export function processScriptureMarkers(text: string): string {
+	return text.replace(
+		/\[SCRIPTURE\[([^\]]+)\]\]/g,
+		(_, refValue) => {
+			const ref = parseScriptureRef(refValue);
+			const displayText = formatScriptureDisplay(ref);
+			const verse = ref.verseStart ?? 1;
+			const href = `/read/${ref.bookId}/${ref.chapter}#osb-${ref.bookId}-${ref.chapter}-${verse}`;
+			return `<a href="${escapeHtml(href)}" class="scripture-ref" data-scripture="${escapeHtml(refValue)}">${escapeHtml(displayText)}</a>`;
+		}
+	);
+}

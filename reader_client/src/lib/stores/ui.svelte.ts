@@ -105,6 +105,7 @@ class UIStore {
 		this.sidePanelContent = { type: 'study', note };
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
 	}
 
 	/** Show a liturgical note in the side panel */
@@ -112,6 +113,7 @@ class UIStore {
 		this.sidePanelContent = { type: 'liturgical', note };
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
 	}
 
 	/** Show a variant note in the side panel */
@@ -119,6 +121,7 @@ class UIStore {
 		this.sidePanelContent = { type: 'variant', note };
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
 	}
 
 	/** Show an article in the side panel */
@@ -126,6 +129,7 @@ class UIStore {
 		this.sidePanelContent = { type: 'article', article };
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
 	}
 
 	/** Show a passage preview in the side panel (from cross-ref click) */
@@ -133,6 +137,7 @@ class UIStore {
 		this.sidePanelContent = { type: 'passage', passage, title };
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
 	}
 
 	/** Close the side panel (mobile) and clear content */

@@ -51,10 +51,10 @@
 			<Icon name="book-open" size={18} />
 			<span class="mode-label">OSB</span>
 		</a>
-		<div class="mode-link active" title="Theological Library">
+		<a href="/library" class="mode-link mode-active touch-target" title="Browse Library">
 			<Icon name="library" size={18} />
 			<span class="mode-label">Library</span>
-		</div>
+		</a>
 	</div>
 </header>
 
@@ -140,12 +140,12 @@
 		transition: background var(--transition-fast), color var(--transition-fast);
 	}
 
-	.mode-link:hover:not(.active) {
+	.mode-link:hover:not(.mode-active) {
 		background: var(--color-bg-hover);
 		color: var(--color-text-primary);
 	}
 
-	.mode-link.active {
+	.mode-link.mode-active {
 		color: var(--color-gold);
 		background: var(--color-gold-dim-bg);
 	}

@@ -42,16 +42,11 @@
 		e.stopPropagation();
 
 		// Show footnote in side panel as an article
-		ui.sidePanelContent = {
+		ui.showArticle({
+			id,
 			type: 'article',
-			article: {
-				id,
-				type: 'article',
-				text: `<strong>Note ${marker}</strong><br><br>${content}`
-			}
-		};
-		ui.sidePanelTab = 'notes';
-		ui.sidePanelOpen = true;
+			text: `<strong>Note ${marker}</strong><br><br>${content}`
+		});
 	}
 </script>
 

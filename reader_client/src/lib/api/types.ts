@@ -276,16 +276,60 @@ export interface ChatMessage {
 	content: string;
 }
 
-/** Context for where the user is reading - sent with chat requests */
-export type ChatContext =
-	| { passage_id: string } // OSB: Specific verse selected
-	| { book_id: string; chapter: number } // OSB: Reading a chapter, no verse selected
-	| { work_id: string; node_id: string } // Library: Reading a library node
-	| null; // General question, no context
+/**
+ * Reading context sent with chat requests.
+ *
+ * Send explicit titles/names along with IDs so the agent doesn't waste
+ * tool calls looking up things the frontend already knows.
+ *
+ * Common patterns:
+ * - OSB verse: { passage_id, book_id, book_name, chapter, verse, verse_text }
+ * - OSB chapter: { book_id, book_name, chapter, chapter_text }
+ * - Library node: { work_id, work_title, node_id, node_title, node_content }
+ * - Library paragraph: { work_id, work_title, node_id, node_title, paragraph_text }
+ * - General: null or {}
+ */
+export interface ChatContext {
+	// ─────────────────────────────────────────────────────────────────────────
+	// OSB (Orthodox Study Bible / Scripture) Context
+	// ─────────────────────────────────────────────────────────────────────────
+
+	/** OSB: Specific verse ID (format: "Gen_vchap1-1") */
+	passage_id?: string;
+	/** OSB: Book ID (lowercase: "genesis") */
+	book_id?: string;
+	/** OSB: Chapter number */
+	chapter?: number;
+	/** OSB: Verse number */
+	verse?: number;
+	/** OSB: Human-readable book name (e.g., "Genesis") */
+	book_name?: string;
+	/** OSB: Actual verse text if a specific verse is selected */
+	verse_text?: string;
+	/** OSB: Full chapter text when reading a chapter (no verse selected) */
+	chapter_text?: string;
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Library (Theological Works) Context
+	// ─────────────────────────────────────────────────────────────────────────
+
+	/** Library: Work ID (slug) */
+	work_id?: string;
+	/** Library: Section/node ID */
+	node_id?: string;
+	/** Library: Human-readable work title */
+	work_title?: string;
+	/** Library: Human-readable section/chapter title */
+	node_title?: string;
+	/** Library: Full text content of the current node/section */
+	node_content?: string;
+	/** Library: Text of a selected paragraph (if user selected one) */
+	paragraph_text?: string;
+}
 
 export interface ChatRequest {
 	messages: ChatMessage[];
-	context: ChatContext;
+	context: ChatContext | null;
 }
 
 export interface ChatToolCall {

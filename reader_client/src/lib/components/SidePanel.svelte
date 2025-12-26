@@ -11,12 +11,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { ui, favorites, chat, reader, formatPosition, preferences, libraryStore } from '$lib/stores';
-	import { passages } from '$lib/api';
+	import { passages, books, type PassageWithAnnotations } from '$lib/api';
 	import type { StudyNote, ScriptureRef, PatristicCitation } from '$lib/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import FavoriteButton from '$lib/components/ui/FavoriteButton.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
 	import TextSizeControl from '$lib/components/ui/TextSizeControl.svelte';
+	import { processScriptureMarkers, parseScriptureRef, formatScriptureDisplay } from '$lib/utils/chatAnnotations';
 
 	// Chat input state
 	let inputValue = $state('');
@@ -141,6 +142,48 @@
 		}
 		return citation.name;
 	}
+
+	// Track loading state for scripture refs in notes
+	let loadingNoteScriptureRef = $state<string | null>(null);
+
+	// Handle scripture link clicks in article/note content
+	async function handleArticleClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+
+		// Check if clicked on a scripture reference link
+		if (target.classList.contains('scripture-ref')) {
+			e.preventDefault();
+			const refValue = target.dataset.scripture;
+			if (!refValue || loadingNoteScriptureRef) return;
+
+			loadingNoteScriptureRef = refValue;
+			target.classList.add('loading');
+
+			try {
+				const ref = parseScriptureRef(refValue);
+				const verse = ref.verseStart ?? 1;
+				const verseEnd = ref.verseEnd ?? verse;
+
+				// Fetch the passage(s) with annotations
+				const response = await books.getVerseRange(ref.bookId, ref.chapter, verse, verseEnd, 'annotations');
+				if (response.passages.length > 0) {
+					const passage = response.passages[0] as PassageWithAnnotations;
+					const displayText = formatScriptureDisplay(ref);
+					ui.showPassage(passage, displayText);
+				}
+			} catch (error) {
+				console.error('Failed to load scripture passage:', error);
+			} finally {
+				loadingNoteScriptureRef = null;
+				target.classList.remove('loading');
+			}
+		}
+	}
+
+	// Process article text to convert scripture markers to clickable links
+	function processNoteContent(text: string): string {
+		return processScriptureMarkers(text);
+	}
 </script>
 
 <div class="side-panel">
@@ -249,8 +292,9 @@
 				</div>
 			{:else if ui.sidePanelContent.type === 'article'}
 				{@const article = ui.sidePanelContent.article}
-				<div class="content-section">
-					<div class="note-text scripture-text">{@html article.text}</div>
+				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+				<div class="content-section" onclick={handleArticleClick}>
+					<div class="note-text scripture-text">{@html processNoteContent(article.text)}</div>
 				</div>
 			{:else if ui.sidePanelContent.type === 'passage'}
 				{@const passage = ui.sidePanelContent.passage}
@@ -594,6 +638,25 @@
 	.note-text {
 		line-height: var(--leading-relaxed);
 		white-space: pre-wrap;
+	}
+
+	/* Scripture references in notes */
+	.note-text :global(.scripture-ref) {
+		color: var(--color-gold);
+		text-decoration: none;
+		border-bottom: 1px dotted var(--color-gold-dim);
+		cursor: pointer;
+		transition: color var(--transition-fast), border-color var(--transition-fast);
+	}
+
+	.note-text :global(.scripture-ref:hover) {
+		color: var(--color-gold-bright);
+		border-bottom-color: var(--color-gold);
+	}
+
+	.note-text :global(.scripture-ref.loading) {
+		opacity: 0.5;
+		cursor: wait;
 	}
 
 	.subsection {

@@ -21,6 +21,13 @@
 
 	// Library link - always go to root to show work selection
 	const libraryHref = '/library';
+
+	// OSB link - go to current position or default
+	const osbHref = $derived(
+		reader.position
+			? `/read/${reader.position.book}/${reader.position.chapter}`
+			: '/read/genesis/1'
+	);
 </script>
 
 <header class="header">
@@ -47,10 +54,10 @@
 	</div>
 
 	<div class="header-right">
-		<div class="mode-link active" title="Orthodox Study Bible">
+		<a href={osbHref} class="mode-link mode-active touch-target" title="Orthodox Study Bible">
 			<Icon name="book-open" size={18} />
 			<span class="mode-label">OSB</span>
-		</div>
+		</a>
 		<a href={libraryHref} class="mode-link touch-target" title="Theological Library">
 			<Icon name="library" size={18} />
 			<span class="mode-label">Library</span>
@@ -134,12 +141,12 @@
 		transition: background var(--transition-fast), color var(--transition-fast);
 	}
 
-	.mode-link:hover:not(.active) {
+	.mode-link:hover:not(.mode-active) {
 		background: var(--color-bg-hover);
 		color: var(--color-text-primary);
 	}
 
-	.mode-link.active {
+	.mode-link.mode-active {
 		color: var(--color-gold);
 		background: var(--color-gold-dim-bg);
 	}

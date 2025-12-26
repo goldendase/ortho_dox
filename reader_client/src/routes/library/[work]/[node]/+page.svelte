@@ -165,7 +165,7 @@
 	}
 
 	.reader-area {
-		flex: 1;
+		flex: 3; /* 3:2 reader:panel ratio */
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
@@ -173,16 +173,18 @@
 	}
 
 	.sidebar-pane {
-		width: 400px;
-		flex-shrink: 0;
+		flex: 2; /* 3:2 reader:panel ratio */
+		min-width: 300px;
+		max-width: 50%;
 		border-left: 1px solid var(--color-border);
 		overflow: hidden;
 		background: var(--color-bg-surface);
-		transition: width var(--transition-normal);
+		transition: flex var(--transition-normal);
 	}
 
 	.sidebar-pane.collapsed {
-		width: 48px;
+		flex: 0 0 48px;
+		min-width: 48px;
 		display: flex;
 		align-items: stretch;
 	}

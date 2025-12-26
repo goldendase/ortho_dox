@@ -199,7 +199,7 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
             children=[build_toc_node(c) for c in children],
         )
 
-    # Find root node (parent_id is None)
+    # Find root nodes (parent_id is None)
     root_nodes = children_by_parent.get(None, [])
     if not root_nodes:
         # Try to find the book node
@@ -211,7 +211,22 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
     if not root_nodes:
         return None
 
-    root = build_toc_node(root_nodes[0])
+    # If there's a single root node, use it directly
+    if len(root_nodes) == 1:
+        root = build_toc_node(root_nodes[0])
+    else:
+        # Multiple root nodes - create a synthetic root containing all of them
+        # This handles works where front matter, main content, and back matter
+        # are all at the root level
+        root = NodeTOC(
+            id=f"{work_id}_root",
+            title=None,  # No title - this is a synthetic container
+            label=None,
+            node_type="book",
+            is_leaf=False,
+            order=0,
+            children=[build_toc_node(n) for n in root_nodes],
+        )
 
     return WorkTOCResponse(work_id=work_id, root=root)
 

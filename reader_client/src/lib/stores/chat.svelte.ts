@@ -111,32 +111,67 @@ class ChatStore {
 	error = $state<string | null>(null);
 
 	/**
-	 * Build the API context based on reading position
-	 * Priority: OSB selected verse > Library selected paragraph > Library node > OSB chapter > null
+	 * Build the API context based on reading position.
+	 *
+	 * Sends explicit titles/names along with IDs so the agent doesn't waste
+	 * tool calls looking up things we already know.
+	 *
+	 * Priority:
+	 * 1. OSB selected verse (highest priority - user explicitly selected)
+	 * 2. Library selected paragraph (user explicitly selected)
+	 * 3. Library node position (user is reading library)
+	 * 4. OSB chapter position (user is reading OSB)
 	 */
-	get currentContext(): ApiChatContext {
-		// OSB: If a specific verse is selected, use passage_id format
+	get currentContext(): ApiChatContext | null {
+		// OSB: If a specific verse is selected, send full verse context
 		const selectedVerse = reader.selectedVerse;
 		if (selectedVerse) {
-			return { passage_id: selectedVerse.passageId };
+			return {
+				passage_id: selectedVerse.passageId,
+				book_id: selectedVerse.book,
+				book_name: selectedVerse.bookName,
+				chapter: selectedVerse.chapter,
+				verse: selectedVerse.verse,
+				verse_text: selectedVerse.text
+			};
 		}
 
-		// Library: If a paragraph is selected, use it (persists across navigation)
+		// Library: If a paragraph is selected, include paragraph text
 		const selectedParagraph = libraryStore.selectedParagraph;
 		if (selectedParagraph) {
-			return { work_id: selectedParagraph.workId, node_id: selectedParagraph.nodeId };
+			const work = libraryStore.currentWork;
+			return {
+				work_id: selectedParagraph.workId,
+				work_title: work?.title,
+				node_id: selectedParagraph.nodeId,
+				node_title: selectedParagraph.nodeTitle,
+				paragraph_text: selectedParagraph.text
+			};
 		}
 
 		// Library: If reading a library node (no paragraph selected)
 		const libPos = libraryStore.position;
 		if (libPos) {
-			return { work_id: libPos.work, node_id: libPos.node };
+			const work = libraryStore.currentWork;
+			const node = libraryStore.currentNode;
+			return {
+				work_id: libPos.work,
+				work_title: libPos.workTitle ?? work?.title,
+				node_id: libPos.node,
+				node_title: libPos.nodeTitle ?? node?.title,
+				node_content: node?.content ?? undefined
+			};
 		}
 
 		// OSB: If reading a chapter (no verse selected)
 		const osbPos = reader.position;
 		if (osbPos) {
-			return { book_id: osbPos.book, chapter: osbPos.chapter };
+			return {
+				book_id: osbPos.book,
+				book_name: osbPos.bookName,
+				chapter: osbPos.chapter
+				// Note: chapter_text would require fetching - backend can handle this
+			};
 		}
 
 		// No context

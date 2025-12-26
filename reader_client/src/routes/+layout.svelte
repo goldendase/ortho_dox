@@ -99,7 +99,7 @@
 
 	.app-main {
 		display: grid;
-		grid-template-columns: 1fr 400px;
+		grid-template-columns: 3fr 2fr; /* 3:2 reader:panel ratio */
 		min-height: 0; /* Allow grid item to shrink */
 		overflow: hidden;
 		transition: grid-template-columns var(--transition-normal);

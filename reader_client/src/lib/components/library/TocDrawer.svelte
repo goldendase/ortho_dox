@@ -34,9 +34,16 @@
 	<nav class="toc-nav">
 		<h3 class="toc-heading">Contents</h3>
 		<div class="toc-tree">
-			{#each toc.children as node (node.id)}
-				<TocNode {node} {workId} onSelect={onClose} />
-			{/each}
+			{#if toc.children && toc.children.length > 0}
+				{#each toc.children as node (node.id)}
+					<TocNode {node} {workId} onSelect={onClose} />
+				{/each}
+			{:else if toc.is_leaf}
+				<!-- Root is a single leaf node - show it directly -->
+				<TocNode node={toc} {workId} onSelect={onClose} />
+			{:else}
+				<p class="empty-toc">No table of contents available</p>
+			{/if}
 		</div>
 	</nav>
 
@@ -95,6 +102,14 @@
 
 	.toc-tree {
 		padding: 0 var(--space-2) var(--space-4);
+	}
+
+	.empty-toc {
+		padding: var(--space-4);
+		font-size: var(--font-sm);
+		font-family: var(--font-ui);
+		color: var(--color-text-muted);
+		text-align: center;
 	}
 
 	.drawer-footer {

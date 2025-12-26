@@ -275,6 +275,9 @@ export function findFirstLeafNode(node: TocNode): TocNode | null {
 	if (node.is_leaf) {
 		return node;
 	}
+	if (!node.children?.length) {
+		return null;
+	}
 	for (const child of node.children) {
 		const leaf = findFirstLeafNode(child);
 		if (leaf) return leaf;
@@ -289,5 +292,5 @@ export function flattenTocLeaves(node: TocNode): TocNode[] {
 	if (node.is_leaf) {
 		return [node];
 	}
-	return node.children.flatMap(flattenTocLeaves);
+	return (node.children ?? []).flatMap(flattenTocLeaves);
 }

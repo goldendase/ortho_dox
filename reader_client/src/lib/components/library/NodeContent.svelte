@@ -233,16 +233,11 @@
 				const fn = footnotesMap.get(id);
 				if (fn) {
 					// Show footnote in side panel
-					ui.sidePanelContent = {
+					ui.showArticle({
+						id: fn.id,
 						type: 'article',
-						article: {
-							id: fn.id,
-							type: 'article',
-							text: fn.content
-						}
-					};
-					ui.sidePanelTab = 'notes';
-					ui.sidePanelOpen = true;
+						text: fn.content
+					});
 				}
 			}
 			return;

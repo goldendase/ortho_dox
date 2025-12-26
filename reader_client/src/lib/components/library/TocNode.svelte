@@ -32,7 +32,7 @@
 	function checkHasActiveChild(n: TocNode, activeNodeId: string | undefined): boolean {
 		if (!activeNodeId) return false;
 		if (n.id === activeNodeId) return true;
-		return n.children.some((child) => checkHasActiveChild(child, activeNodeId));
+		return n.children?.some((child) => checkHasActiveChild(child, activeNodeId)) ?? false;
 	}
 
 	function handleClick() {
@@ -69,7 +69,7 @@
 			<span class="toc-title">{title}</span>
 		</button>
 
-		{#if expanded && node.children.length > 0}
+		{#if expanded && node.children?.length > 0}
 			<div class="toc-children">
 				{#each node.children as child (child.id)}
 					<svelte:self node={child} {workId} depth={depth + 1} {onSelect} />
