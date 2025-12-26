@@ -44,7 +44,7 @@
 
 		if (isSameChapter && verseStart !== null) {
 			// Same chapter - just scroll to and select the verse
-			const verseEl = document.getElementById(`v${verseStart}`);
+			const verseEl = document.getElementById(`osb-${bookId}-${chapter}-${verseStart}`);
 			if (verseEl) {
 				verseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 				// Simulate clicking the verse to select it

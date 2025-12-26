@@ -26,7 +26,7 @@ export type SidePanelContent =
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Tabs available in the side panel */
-export type SidePanelTab = 'notes' | 'chat';
+export type SidePanelTab = 'notes' | 'chat' | 'settings';
 
 class UIStore {
 	/** Book picker sheet visibility */
@@ -37,6 +37,9 @@ class UIStore {
 
 	/** Side panel open state (for mobile sheet) */
 	sidePanelOpen = $state(false);
+
+	/** Side panel collapsed state (desktop) */
+	sidePanelCollapsed = $state(false);
 
 	/** Active tab in side panel */
 	sidePanelTab = $state<SidePanelTab>('notes');
@@ -49,6 +52,22 @@ class UIStore {
 	setTab(tab: SidePanelTab): void {
 		this.sidePanelTab = tab;
 		this.sidePanelOpen = true; // Open panel on mobile when switching tabs
+		this.sidePanelCollapsed = false; // Expand panel when switching tabs
+	}
+
+	/** Toggle side panel collapsed state (desktop) */
+	toggleSidePanelCollapsed(): void {
+		this.sidePanelCollapsed = !this.sidePanelCollapsed;
+	}
+
+	/** Expand side panel */
+	expandSidePanel(): void {
+		this.sidePanelCollapsed = false;
+	}
+
+	/** Collapse side panel */
+	collapseSidePanel(): void {
+		this.sidePanelCollapsed = true;
 	}
 
 	/** Switch to chat tab */
@@ -136,6 +155,7 @@ class UIStore {
 		this.bookPickerOpen = false;
 		this.sidePanelContent = null;
 		this.sidePanelOpen = false;
+		this.sidePanelCollapsed = false;
 		this.sidePanelTab = 'notes';
 	}
 }

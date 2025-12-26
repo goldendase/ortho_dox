@@ -23,21 +23,39 @@
 			chapter: data.chapter.chapter
 		};
 		untrack(() => reader.navigate(pos));
+
+		// Scroll to top when chapter changes (unless there's a hash to scroll to)
+		if (!window.location.hash) {
+			const readerPane = document.querySelector('.reader-pane');
+			if (readerPane) {
+				readerPane.scrollTo({ top: 0, behavior: 'instant' });
+			}
+		}
 	});
 
-	// Scroll to verse if hash present (e.g., #v15)
+	// Scroll to verse if hash present
+	// Supports both formats:
+	// - #osb-genesis-1-15 (new distinct format for cross-links)
+	// - #v15 (legacy format, still used for some links)
 	// Also auto-select if 'select' query param present (from chat annotation links)
 	onMount(() => {
 		const hash = $page.url.hash;
 		const selectParam = $page.url.searchParams.get('select');
 
-		// Determine which verse to scroll to (hash takes precedence)
-		const verseNum = hash.startsWith('#v')
-			? hash.slice(2)
-			: selectParam;
+		// Parse verse number from hash (check osb format first, then legacy #v format)
+		let verseNum: string | null = null;
+		const osbMatch = hash.match(/^#osb-[^-]+-\d+-(\d+)$/);
+		if (osbMatch) {
+			verseNum = osbMatch[1];
+		} else if (hash.startsWith('#v')) {
+			verseNum = hash.slice(2);
+		} else if (selectParam) {
+			verseNum = selectParam;
+		}
 
 		if (verseNum) {
-			const verseEl = document.getElementById(`v${verseNum}`);
+			// Use the new ID format for lookup
+			const verseEl = document.getElementById(`osb-${data.chapter.book_id}-${data.chapter.chapter}-${verseNum}`);
 			if (verseEl) {
 				verseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 				reader.scrollToVerse(parseInt(verseNum, 10));

@@ -10,12 +10,13 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { ui, favorites, chat, reader, formatPosition } from '$lib/stores';
+	import { ui, favorites, chat, reader, formatPosition, preferences } from '$lib/stores';
 	import { passages } from '$lib/api';
 	import type { StudyNote, ScriptureRef, PatristicCitation } from '$lib/api';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import FavoriteButton from '$lib/components/ui/FavoriteButton.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
+	import TextSizeControl from '$lib/components/ui/TextSizeControl.svelte';
 
 	// Chat input state
 	let inputValue = $state('');
@@ -127,7 +128,7 @@
 		const content = ui.sidePanelContent;
 		if (content?.type === 'passage') {
 			const { book_id, chapter, verse } = content.passage;
-			goto(`/read/${book_id}/${chapter}#v${verse}`);
+			goto(`/read/${book_id}/${chapter}#osb-${book_id}-${chapter}-${verse}`);
 			ui.closeSidePanel();
 		}
 	}
@@ -142,32 +143,51 @@
 </script>
 
 <div class="side-panel">
-	<!-- Tab bar -->
-	<div class="tab-bar">
-		<button
-			class="tab-button"
-			class:active={ui.sidePanelTab === 'notes'}
-			onclick={() => ui.setTab('notes')}
-		>
-			<Icon name="note" size={16} />
-			<span>Notes</span>
-		</button>
-		<button
-			class="tab-button"
-			class:active={ui.sidePanelTab === 'chat'}
-			onclick={() => ui.setTab('chat')}
-		>
-			<Icon name="message" size={16} />
-			<span>Chat</span>
-		</button>
-		<button
-			class="close-button touch-target mobile-only"
-			onclick={() => ui.closeSidePanel()}
-			aria-label="Close panel"
-		>
-			<Icon name="x" size={20} />
-		</button>
-	</div>
+	<!-- Collapse rail on left side (desktop only) -->
+	<button
+		class="collapse-rail desktop-only"
+		onclick={() => ui.collapseSidePanel()}
+		aria-label="Collapse panel"
+	>
+		<Icon name="chevron-right" size={16} />
+	</button>
+
+	<!-- Main panel content -->
+	<div class="panel-main">
+		<!-- Tab bar -->
+		<div class="tab-bar">
+			<button
+				class="tab-button"
+				class:active={ui.sidePanelTab === 'notes'}
+				onclick={() => ui.setTab('notes')}
+			>
+				<Icon name="note" size={16} />
+				<span>Notes</span>
+			</button>
+			<button
+				class="tab-button"
+				class:active={ui.sidePanelTab === 'chat'}
+				onclick={() => ui.setTab('chat')}
+			>
+				<Icon name="message" size={16} />
+				<span>Chat</span>
+			</button>
+			<button
+				class="tab-button"
+				class:active={ui.sidePanelTab === 'settings'}
+				onclick={() => ui.setTab('settings')}
+			>
+				<Icon name="settings" size={16} />
+				<span>Settings</span>
+			</button>
+			<button
+				class="close-button touch-target mobile-only"
+				onclick={() => ui.closeSidePanel()}
+				aria-label="Close panel"
+			>
+				<Icon name="x" size={20} />
+			</button>
+		</div>
 
 	<!-- Notes Tab -->
 	<div class="tab-content" class:hidden={ui.sidePanelTab !== 'notes'}>
@@ -358,14 +378,62 @@
 			</form>
 		</div>
 	</div>
+
+	<!-- Settings Tab -->
+	<div class="tab-content" class:hidden={ui.sidePanelTab !== 'settings'}>
+		<header class="panel-header">
+			<h2 class="panel-title font-ui">Settings</h2>
+		</header>
+
+		<div class="panel-content">
+			<div class="settings-section">
+				<h3 class="settings-label font-ui">Text Size</h3>
+				<p class="settings-description text-muted">
+					Adjust the reading text size for both OSB and Library modes.
+				</p>
+				<div class="settings-control">
+					<TextSizeControl />
+				</div>
+			</div>
+		</div>
+	</div>
+	</div><!-- end panel-main -->
 </div>
 
 <style>
 	.side-panel {
 		display: flex;
-		flex-direction: column;
+		flex-direction: row;
 		height: 100%;
 		background: var(--color-bg-surface);
+		overflow: hidden;
+	}
+
+	/* Collapse rail - full height left edge */
+	.collapse-rail {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		flex-shrink: 0;
+		background: var(--color-bg-elevated);
+		border-right: 1px solid var(--color-border);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: background var(--transition-fast), color var(--transition-fast);
+	}
+
+	.collapse-rail:hover {
+		background: var(--color-bg-hover);
+		color: var(--color-text-primary);
+	}
+
+	/* Main panel content */
+	.panel-main {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		min-width: 0;
 		overflow: hidden;
 	}
 
@@ -438,9 +506,15 @@
 		background: var(--color-bg-hover);
 	}
 
-	/* Show close button only on mobile */
+	/* Show close button only on mobile, collapse rail only on desktop */
 	@media (min-width: 769px) {
 		.mobile-only {
+			display: none;
+		}
+	}
+
+	@media (max-width: 768px) {
+		.desktop-only {
 			display: none;
 		}
 	}
@@ -814,5 +888,31 @@
 	.send-button:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	/* ─────────────────────────────────────────────────────
+	   Settings Tab
+	   ───────────────────────────────────────────────────── */
+	.settings-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
+	.settings-label {
+		font-size: var(--font-sm);
+		font-weight: var(--font-semibold);
+		color: var(--color-text-primary);
+		margin: 0;
+	}
+
+	.settings-description {
+		font-size: var(--font-sm);
+		margin: 0;
+		line-height: var(--leading-normal);
+	}
+
+	.settings-control {
+		margin-top: var(--space-2);
 	}
 </style>

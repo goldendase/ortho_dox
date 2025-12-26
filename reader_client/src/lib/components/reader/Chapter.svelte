@@ -103,7 +103,7 @@
 <style>
 	.chapter {
 		font-family: var(--font-body);
-		font-size: var(--font-base);
+		font-size: var(--text-size, var(--font-base));
 		color: var(--color-text-primary);
 	}
 </style>

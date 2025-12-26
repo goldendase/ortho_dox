@@ -6,8 +6,8 @@
   Assistant messages render as flowing report content with markdown.
 -->
 <script lang="ts">
-	import type { ChatMessage } from '$lib/stores';
-	import { formatPosition } from '$lib/stores';
+	import type { ChatMessage, ReaderPosition, LibraryPosition } from '$lib/stores';
+	import { formatPosition, formatLibraryPosition } from '$lib/stores';
 	import ChatMessageContent from './ChatMessageContent.svelte';
 
 	interface Props {
@@ -21,6 +21,19 @@
 		minute: '2-digit',
 		hour12: true
 	});
+
+	// Type guard for ReaderPosition (OSB)
+	function isReaderPosition(ctx: ReaderPosition | LibraryPosition): ctx is ReaderPosition {
+		return 'book' in ctx && 'chapter' in ctx;
+	}
+
+	// Format context based on type
+	function formatContext(ctx: ReaderPosition | LibraryPosition): string {
+		if (isReaderPosition(ctx)) {
+			return formatPosition(ctx);
+		}
+		return formatLibraryPosition(ctx);
+	}
 </script>
 
 {#if message.role === 'user'}
@@ -30,7 +43,7 @@
 			<span class="query-label font-ui">Question</span>
 			{#if message.context}
 				<span class="query-context text-muted font-ui">
-					{formatPosition(message.context)}
+					{formatContext(message.context)}
 				</span>
 			{/if}
 			<span class="query-time text-muted font-ui">

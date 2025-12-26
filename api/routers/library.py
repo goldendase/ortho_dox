@@ -76,7 +76,7 @@ async def get_node(
     work_id: str,
     node_id: str,
     expand: LibraryExpandMode = LibraryExpandMode.NONE,
-) -> NodeMinimal | NodeWithComponents | NodeFull:
+):
     """
     Get a specific node (chapter/section) from a work.
 
@@ -91,7 +91,8 @@ async def get_node(
             status_code=404,
             detail=f"Node not found: {node_id} in work {work_id}",
         )
-    return node
+    # Return dict to avoid Union type serialization issues with Pydantic v2
+    return node.model_dump()
 
 
 # --- Scripture References ---

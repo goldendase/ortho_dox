@@ -18,6 +18,9 @@
 	}
 
 	let { books = [] }: Props = $props();
+
+	// Library link - always go to root to show work selection
+	const libraryHref = '/library';
 </script>
 
 <header class="header">
@@ -44,7 +47,14 @@
 	</div>
 
 	<div class="header-right">
-		<!-- Placeholder for future actions (settings, etc.) -->
+		<div class="mode-link active" title="Orthodox Study Bible">
+			<Icon name="book-open" size={18} />
+			<span class="mode-label">OSB</span>
+		</div>
+		<a href={libraryHref} class="mode-link touch-target" title="Theological Library">
+			<Icon name="library" size={18} />
+			<span class="mode-label">Library</span>
+		</a>
 	</div>
 </header>
 
@@ -111,6 +121,33 @@
 		white-space: nowrap;
 	}
 
+	.mode-link {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-3);
+		color: var(--color-text-secondary);
+		text-decoration: none;
+		font-family: var(--font-ui);
+		font-size: var(--font-sm);
+		border-radius: var(--radius-md);
+		transition: background var(--transition-fast), color var(--transition-fast);
+	}
+
+	.mode-link:hover:not(.active) {
+		background: var(--color-bg-hover);
+		color: var(--color-text-primary);
+	}
+
+	.mode-link.active {
+		color: var(--color-gold);
+		background: var(--color-gold-dim-bg);
+	}
+
+	.mode-label {
+		font-weight: var(--font-medium);
+	}
+
 	/* Hide logo on mobile to save space */
 	@media (max-width: 768px) {
 		.header-center {
@@ -119,6 +156,14 @@
 
 		.header-left {
 			flex: none;
+		}
+
+		.mode-label {
+			display: none;
+		}
+
+		.mode-link {
+			padding: var(--space-2);
 		}
 	}
 </style>

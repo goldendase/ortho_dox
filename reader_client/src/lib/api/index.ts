@@ -2,9 +2,10 @@
  * API Module Barrel Export
  *
  * Usage:
- *   import { books, passages, context, ApiError } from '$lib/api';
+ *   import { books, passages, context, library, ApiError } from '$lib/api';
  *
  *   const chapter = await books.getChapterPassages('genesis', 1, 'annotations');
+ *   const works = await library.listWorks();
  */
 
 export { api, ApiError, type ApiRequestOptions } from './client';
@@ -13,4 +14,18 @@ export { passages, getPassage, batchPassages } from './passages';
 export { annotations, getAnnotation, type AnnotationResult } from './annotations';
 export { context, getContext, getCrossRefs } from './context';
 export { chatApi, sendChatMessage } from './chat';
+export {
+	library,
+	listWorks,
+	getWork,
+	getToc,
+	getNode,
+	getLeafNode,
+	getWorkScriptureRefs,
+	getNodeScriptureRefs,
+	listAuthors,
+	getAuthor,
+	getAuthorWorks,
+	getNodeContext
+} from './library';
 export * from './types';

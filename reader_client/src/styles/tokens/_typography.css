@@ -39,6 +39,11 @@
 	--leading-normal: 1.6;   /* Body text */
 	--leading-relaxed: 1.8;  /* Scripture reading */
 
+	/* Aliases for consistency */
+	--line-height-tight: var(--leading-tight);
+	--line-height-normal: var(--leading-normal);
+	--line-height-relaxed: var(--leading-relaxed);
+
 	/* ─────────────────────────────────────────────────────
 	   Letter Spacing
 	   ───────────────────────────────────────────────────── */

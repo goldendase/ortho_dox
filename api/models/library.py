@@ -178,7 +178,6 @@ class NodeMinimal(BaseModel):
     depth: int
     is_leaf: bool
     content: str | None = None  # Only for leaf nodes
-    content_html: str | None = None
 
 
 class NodeWithComponents(NodeMinimal):

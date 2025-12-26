@@ -91,7 +91,7 @@
 <p
 	class="verse scripture-text"
 	class:selected={isSelected}
-	id="v{passage.verse}"
+	id="osb-{passage.book_id}-{passage.chapter}-{passage.verse}"
 	onclick={handleSelectVerse}
 	onmouseenter={() => (isHovered = true)}
 	onmouseleave={() => (isHovered = false)}

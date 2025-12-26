@@ -15,3 +15,20 @@ export {
 	type FavoriteNote
 } from './favorites.svelte';
 export { auth } from './auth.svelte';
+export {
+	libraryStore,
+	formatLibraryPosition,
+	libraryPositionToPath,
+	getTocNodeTitle,
+	findFirstLeafNode,
+	flattenTocLeaves,
+	type LibraryPosition
+} from './library.svelte';
+export {
+	preferences,
+	TEXT_SIZE_VALUES,
+	TEXT_SIZE_LABELS,
+	type TextSize,
+	type ScriptureRefBehavior,
+	type Preferences
+} from './preferences.svelte';

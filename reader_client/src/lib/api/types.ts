@@ -278,8 +278,9 @@ export interface ChatMessage {
 
 /** Context for where the user is reading - sent with chat requests */
 export type ChatContext =
-	| { passage_id: string } // Specific verse selected
-	| { book_id: string; chapter: number } // Reading a chapter, no verse selected
+	| { passage_id: string } // OSB: Specific verse selected
+	| { book_id: string; chapter: number } // OSB: Reading a chapter, no verse selected
+	| { work_id: string; node_id: string } // Library: Reading a library node
 	| null; // General question, no context
 
 export interface ChatRequest {
@@ -297,6 +298,278 @@ export interface ChatResponse {
 	message: ChatMessage;
 	tool_calls: ChatToolCall[];
 	error: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Works
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LibraryCategory =
+	| 'patristic'
+	| 'biography'
+	| 'church_history'
+	| 'spiritual'
+	| 'liturgical'
+	| 'theological';
+
+export type AuthorRole = 'author' | 'translator' | 'editor' | 'compiler';
+
+export interface LibraryAuthor {
+	id: string;
+	name: string;
+	role: AuthorRole;
+	dates?: string;
+	description?: string;
+}
+
+export interface LibraryWorkSummary {
+	id: string;
+	title: string;
+	subtitle?: string;
+	authors: LibraryAuthor[];
+	category: LibraryCategory;
+	subjects: string[];
+	node_count: number;
+	has_images: boolean;
+}
+
+export interface LibraryWork extends LibraryWorkSummary {
+	publisher?: string;
+	publication_date?: string;
+	isbn?: string;
+	source_format: 'epub' | 'pdf' | 'html';
+	leaf_count: number;
+	scripture_ref_count: number;
+}
+
+export interface LibraryWorksResponse {
+	works: LibraryWorkSummary[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Nodes (TOC structure)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LibraryNodeType =
+	| 'book'
+	| 'part'
+	| 'chapter'
+	| 'section'
+	| 'essay'
+	| 'letter';
+
+export interface TocNode {
+	id: string;
+	title?: string;
+	label?: string;
+	node_type: LibraryNodeType;
+	is_leaf: boolean;
+	order: number;
+	children: TocNode[];
+}
+
+export interface TocResponse {
+	work_id: string;
+	root: TocNode;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Node Content & Components
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LibraryComponentType =
+	| 'footnote'
+	| 'endnote'
+	| 'image'
+	| 'quote'
+	| 'epigraph'
+	| 'poem'
+	| 'letter';
+
+export interface LibraryFootnote {
+	id: string;
+	type: 'footnote' | 'endnote';
+	marker: string;
+	content: string;
+}
+
+export interface LibraryImage {
+	id: string;
+	type: 'image';
+	image_path: string;
+	caption?: string;
+	alt_text?: string;
+}
+
+export interface LibraryQuote {
+	id: string;
+	type: 'quote' | 'epigraph';
+	content: string;
+	attribution?: string;
+}
+
+export interface LibraryPoem {
+	id: string;
+	type: 'poem';
+	content: string;
+	attribution?: string;
+}
+
+export interface LibraryLetter {
+	id: string;
+	type: 'letter';
+	content: string;
+	header?: string;
+}
+
+export interface LibraryComponents {
+	footnotes: LibraryFootnote[];
+	endnotes: LibraryFootnote[];
+	images: LibraryImage[];
+	quotes: LibraryQuote[];
+	epigraphs: LibraryQuote[];
+	poems: LibraryPoem[];
+	letters: LibraryLetter[];
+}
+
+export interface LibraryNodeNavigation {
+	prev?: { id: string; title?: string; label?: string };
+	next?: { id: string; title?: string; label?: string };
+	parent?: { id: string; title?: string; label?: string };
+}
+
+/** Non-leaf node (container) */
+export interface LibraryNodeContainer {
+	id: string;
+	work_id: string;
+	title?: string;
+	label?: string;
+	node_type: LibraryNodeType;
+	depth: number;
+	is_leaf: false;
+	content: null;
+	children: Array<{
+		id: string;
+		title?: string;
+		label?: string;
+		node_type: LibraryNodeType;
+		is_leaf: boolean;
+	}>;
+	navigation?: LibraryNodeNavigation; // Only with expand=full
+}
+
+/** Leaf node (has content) */
+export interface LibraryNodeLeaf {
+	id: string;
+	work_id: string;
+	title?: string;
+	label?: string;
+	node_type: LibraryNodeType;
+	depth: number;
+	is_leaf: true;
+	content: string;
+	components?: LibraryComponents;
+	navigation?: LibraryNodeNavigation; // Only with expand=full
+}
+
+export type LibraryNode = LibraryNodeContainer | LibraryNodeLeaf;
+
+export type LibraryExpandMode = 'none' | 'components' | 'full';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Scripture References
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LibraryScriptureRefTarget {
+	passage_id: string;
+	book_id: string;
+	book_name: string;
+	chapter: number;
+	verse_start: number;
+	verse_end?: number;
+	preview: string;
+}
+
+export interface LibraryScriptureRef {
+	id: string;
+	source_node_id: string;
+	source_node_title?: string;
+	reference_text: string;
+	target: LibraryScriptureRefTarget;
+}
+
+export interface LibraryScriptureRefsResponse {
+	work_id: string;
+	work_title: string;
+	scripture_refs: LibraryScriptureRef[];
+	total: number;
+	limit: number;
+	offset: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Authors
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LibraryAuthorDetail {
+	id: string;
+	name: string;
+	dates?: string;
+	description?: string;
+	work_count: number;
+}
+
+export interface LibraryAuthorsResponse {
+	authors: LibraryAuthorDetail[];
+	total: number;
+}
+
+export interface LibraryAuthorWorksResponse {
+	author: { id: string; name: string };
+	works: Array<{
+		id: string;
+		title: string;
+		role: AuthorRole;
+		category: LibraryCategory;
+	}>;
+	total: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Context (MCP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LibraryNodeContext {
+	node: {
+		id: string;
+		work_id: string;
+		work_title: string;
+		title?: string;
+		node_type: LibraryNodeType;
+		content: string;
+		components?: LibraryComponents;
+	};
+	author: {
+		id: string;
+		name: string;
+		dates?: string;
+	};
+	scripture_references: Array<{
+		reference_text: string;
+		passage_id: string;
+		book_name: string;
+		chapter: number;
+		verse: number;
+		preview: string;
+	}>;
+	navigation: {
+		prev?: { id: string; title?: string };
+		next?: { id: string; title?: string };
+		breadcrumb: Array<{ id: string; title?: string }>;
+	};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
