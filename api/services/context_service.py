@@ -3,9 +3,9 @@
 from api.db import MongoDB
 from api.models.annotation import AnnotationDetail
 from api.models.common import AnnotationType, ExpandMode
-from api.models.context import CrossReferences, CrossRefsResponse, PassageContext
+from api.models.context import CrossReferences, CrossRefsResponse, LibraryRefContext, PassageContext
 from api.models.passage import PassageFull, PassageRef, PatristicCitationExpanded
-from api.services import passage_service
+from api.services import library_service, passage_service
 
 
 async def _fetch_incoming_cross_refs(passage_id: str) -> list[PassageRef]:
@@ -94,6 +94,26 @@ async def _fetch_related_articles(passage_id: str) -> list[AnnotationDetail]:
     return articles
 
 
+async def _fetch_library_refs(passage_id: str) -> list[LibraryRefContext]:
+    """Fetch library works that cite this passage."""
+    refs_response = await library_service.get_library_refs_for_passage(passage_id)
+
+    library_refs = []
+    for ref in refs_response.library_refs:
+        library_refs.append(
+            LibraryRefContext(
+                work_id=ref.work_id,
+                work_title=ref.work_title,
+                node_id=ref.node_id,
+                node_title=ref.node_title,
+                author=ref.author.name if ref.author else None,
+                context_snippet=ref.context_snippet,
+            )
+        )
+
+    return library_refs
+
+
 async def get_passage_context(passage_id: str) -> PassageContext | None:
     """Get full context bundle for a passage."""
     # Get the passage with full expand
@@ -115,11 +135,15 @@ async def get_passage_context(passage_id: str) -> PassageContext | None:
     # Get related articles
     related_articles = await _fetch_related_articles(passage_id)
 
+    # Get library refs
+    library_refs = await _fetch_library_refs(passage_id)
+
     return PassageContext(
         passage=passage,
         cross_references=CrossReferences(outgoing=outgoing, incoming=incoming),
         patristic_sources=patristic_sources,
         related_articles=related_articles,
+        library_refs=library_refs,
     )
 
 

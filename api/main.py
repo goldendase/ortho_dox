@@ -14,7 +14,7 @@ from starlette.responses import Response
 
 from api.config import settings
 from api.db import MongoDB
-from api.routers import annotations, books, chat, context, passages, patristic
+from api.routers import annotations, books, chat, context, library, passages, patristic
 
 # Logging setup
 LOG_DIR = Path(__file__).parent.parent / "log"
@@ -33,8 +33,8 @@ logger = logging.getLogger("api")
 logger.setLevel(logging.WARNING)
 
 API_DESCRIPTION = """
-REST API for the Orthodox Study Bible, serving verse text, patristic commentary,
-cross-references, and liturgical notes from MongoDB.
+REST API for the Orthodox Study Bible and Theological Library, serving verse text,
+patristic commentary, cross-references, liturgical notes, and theological works from MongoDB.
 
 ## Consumers
 
@@ -47,12 +47,18 @@ cross-references, and liturgical notes from MongoDB.
 - **Bidirectional cross-refs**: Find passages that reference a verse, not just what it references
 - **Patristic citations**: 53 Church Fathers with citation counts
 - **LXX numbering**: Psalms use Septuagint numbering (Psalm 22 = "The Lord is my shepherd")
+- **Theological Library**: Browse patristic texts, biographies, and spiritual writings with scripture cross-references
 
 ## Data Notes
 
 - Passage IDs are opaque keys (e.g., `Gen_vchap1-1`) - don't parse them
 - Text preserves semantic `<i>` and `<b>` markup intentionally
 - 78 canonical books (full Orthodox Old Testament + New Testament)
+
+## Documentation
+
+- [API_SPEC.md](./API_SPEC.md) - OSB API specification
+- [LIBRARY_SPEC.md](./LIBRARY_SPEC.md) - Library API specification
 """
 
 TAGS_METADATA = [
@@ -79,6 +85,10 @@ TAGS_METADATA = [
     {
         "name": "chat",
         "description": "Chat with the OSB study assistant (Michael) using GLM-4.7 with tool access to the database.",
+    },
+    {
+        "name": "library",
+        "description": "Theological library of patristic texts, biographies, and spiritual writings.",
     },
 ]
 
@@ -173,6 +183,7 @@ app.include_router(annotations.router)
 app.include_router(patristic.router)
 app.include_router(context.router)
 app.include_router(chat.router)
+app.include_router(library.router)
 
 
 @app.get("/health", tags=["health"])

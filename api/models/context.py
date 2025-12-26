@@ -13,6 +13,17 @@ class CrossReferences(BaseModel):
     incoming: list[PassageRef] = []  # Passages that reference this verse
 
 
+class LibraryRefContext(BaseModel):
+    """Library reference for context response."""
+
+    work_id: str
+    work_title: str
+    node_id: str
+    node_title: str | None = None
+    author: str | None = None
+    context_snippet: str | None = None
+
+
 class PassageContext(BaseModel):
     """Full context bundle for a passage (MCP-focused)."""
 
@@ -20,6 +31,7 @@ class PassageContext(BaseModel):
     cross_references: CrossReferences
     patristic_sources: list[PatristicCitationExpanded] = []
     related_articles: list[AnnotationDetail] = []
+    library_refs: list[LibraryRefContext] = []
 
 
 class CrossRefsResponse(BaseModel):
