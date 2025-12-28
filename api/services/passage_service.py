@@ -33,11 +33,12 @@ def _parse_passage_id(passage_id: str) -> tuple[str, int, int] | None:
     return None
 
 
-def _doc_to_minimal(doc: dict) -> PassageMinimal:
+def _doc_to_minimal(doc: dict, book_name: str) -> PassageMinimal:
     """Convert MongoDB document to PassageMinimal."""
     return PassageMinimal(
         id=doc["_id"],
         book_id=doc["book_id"],
+        book_name=book_name,
         chapter=doc["chapter"],
         verse=doc["verse"],
         text=doc.get("text", ""),
@@ -375,8 +376,12 @@ async def get_passage(
     if not doc:
         return None
 
+    # Fetch book name for all modes
+    book_names = await _fetch_book_names([doc["book_id"]])
+    book_name = book_names.get(doc["book_id"], doc["book_id"])
+
     if expand == ExpandMode.NONE:
-        return _doc_to_minimal(doc)
+        return _doc_to_minimal(doc, book_name)
 
     # Fetch book abbreviation mappings for scripture refs
     book_names_by_abbrev = await _fetch_book_names_by_abbrev()
@@ -394,7 +399,7 @@ async def get_passage(
     markers = [_doc_to_marker(m) for m in doc.get("annotation_markers", [])]
 
     if expand == ExpandMode.ANNOTATIONS:
-        minimal = _doc_to_minimal(doc)
+        minimal = _doc_to_minimal(doc, book_name)
         return PassageWithAnnotations(
             **minimal.model_dump(),
             annotations=_group_annotations(annotations, book_names_by_abbrev),
@@ -403,7 +408,6 @@ async def get_passage(
 
     # expand == FULL
     patristic_map = await _fetch_patristic_map()
-    book_names = await _fetch_book_names([doc["book_id"]])
     books_ordered = await _fetch_books_ordered()
 
     # Batch resolve cross-refs
@@ -417,10 +421,9 @@ async def get_passage(
     if include_html:
         html = await _get_html(passage_id)
 
-    minimal = _doc_to_minimal(doc)
+    minimal = _doc_to_minimal(doc, book_name)
     return PassageFull(
         **minimal.model_dump(),
-        book_name=book_names.get(doc["book_id"], doc["book_id"]),
         html=html,
         annotations=_group_annotations_full(
             annotations, patristic_map, book_names_by_abbrev
@@ -444,8 +447,18 @@ async def get_passages_by_ids(
     cursor = db.passages.find({"_id": {"$in": passage_ids}})
     docs = await cursor.to_list(length=None)
 
+    if not docs:
+        return []
+
+    # Fetch book names for all modes
+    book_ids = list({d["book_id"] for d in docs})
+    book_names = await _fetch_book_names(book_ids)
+
     if expand == ExpandMode.NONE:
-        return [_doc_to_minimal(d) for d in docs]
+        return [
+            _doc_to_minimal(d, book_names.get(d["book_id"], d["book_id"]))
+            for d in docs
+        ]
 
     # Fetch book abbreviation mappings for scripture refs
     book_names_by_abbrev = await _fetch_book_names_by_abbrev()
@@ -463,13 +476,10 @@ async def get_passages_by_ids(
     ann_by_id = {a["_id"]: a for a in all_annotations}
 
     patristic_map = {}
-    book_names = {}
     refs_by_id = {}
 
     if expand == ExpandMode.FULL:
         patristic_map = await _fetch_patristic_map()
-        book_ids = list({d["book_id"] for d in docs})
-        book_names = await _fetch_book_names(book_ids)
 
         # Batch fetch all cross-ref targets
         all_cross_ref_ids = []
@@ -479,6 +489,7 @@ async def get_passages_by_ids(
 
     results = []
     for doc in docs:
+        book_name = book_names.get(doc["book_id"], doc["book_id"])
         doc_ann_ids = (
             doc.get("study_note_ids", [])
             + doc.get("liturgical_ids", [])
@@ -488,7 +499,7 @@ async def get_passages_by_ids(
         )
         doc_annotations = [ann_by_id[aid] for aid in doc_ann_ids if aid in ann_by_id]
         markers = [_doc_to_marker(m) for m in doc.get("annotation_markers", [])]
-        minimal = _doc_to_minimal(doc)
+        minimal = _doc_to_minimal(doc, book_name)
 
         if expand == ExpandMode.ANNOTATIONS:
             results.append(PassageWithAnnotations(
@@ -503,7 +514,6 @@ async def get_passages_by_ids(
 
             results.append(PassageFull(
                 **minimal.model_dump(),
-                book_name=book_names.get(doc["book_id"], doc["book_id"]),
                 html=None,
                 annotations=_group_annotations_full(
                     doc_annotations, patristic_map, book_names_by_abbrev
@@ -552,8 +562,12 @@ async def get_chapter_passages(
     if not docs:
         return [], navigation
 
+    # Fetch book name for all modes
+    book_names = await _fetch_book_names([book_id])
+    book_name = book_names.get(book_id, book_id)
+
     if expand == ExpandMode.NONE:
-        return [_doc_to_minimal(d) for d in docs], navigation
+        return [_doc_to_minimal(d, book_name) for d in docs], navigation
 
     # Fetch book abbreviation mappings for scripture refs
     book_names_by_abbrev = await _fetch_book_names_by_abbrev()
@@ -571,12 +585,10 @@ async def get_chapter_passages(
     ann_by_id = {a["_id"]: a for a in all_annotations}
 
     patristic_map = {}
-    book_names = {}
     refs_by_id = {}
 
     if expand == ExpandMode.FULL:
         patristic_map = await _fetch_patristic_map()
-        book_names = await _fetch_book_names([book_id])
 
         # Batch fetch all cross-ref targets
         all_cross_ref_ids = []
@@ -595,7 +607,7 @@ async def get_chapter_passages(
         )
         doc_annotations = [ann_by_id[aid] for aid in doc_ann_ids if aid in ann_by_id]
         markers = [_doc_to_marker(m) for m in doc.get("annotation_markers", [])]
-        minimal = _doc_to_minimal(doc)
+        minimal = _doc_to_minimal(doc, book_name)
 
         if expand == ExpandMode.ANNOTATIONS:
             results.append(PassageWithAnnotations(
@@ -610,7 +622,6 @@ async def get_chapter_passages(
 
             results.append(PassageFull(
                 **minimal.model_dump(),
-                book_name=book_names.get(book_id, book_id),
                 html=None,
                 annotations=_group_annotations_full(
                     doc_annotations, patristic_map, book_names_by_abbrev

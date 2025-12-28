@@ -18,6 +18,7 @@ class PassageMinimal(BaseModel):
 
     id: str  # "Gen_vchap1-1"
     book_id: str
+    book_name: str
     chapter: int
     verse: int
     text: str  # Preserves <i>/<b> semantic markup
@@ -121,7 +122,6 @@ class NavigationLinks(BaseModel):
 class PassageFull(PassageMinimal):
     """Full passage with all context (expand=full)."""
 
-    book_name: str
     html: str | None = None
     annotations: AnnotationsGroupFull
     annotation_markers: list[AnnotationMarker] = []
