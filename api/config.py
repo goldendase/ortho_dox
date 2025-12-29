@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     # Auth settings
     hmog_secret: str = ""
 
+    # Vector search settings (Pinecone + Voyage AI)
+    pinecone_api_key: str = ""
+    pinecone_index_name: str = "ortho-docs"
+    voyage_api_key: str = ""
+    embedding_model_name: str = "voyage-3-large"
+    vector_search_min_score: float = 0.35  # Minimum similarity score (dotproduct, 0-1 range)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

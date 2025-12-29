@@ -7,6 +7,7 @@ patristic commentary, and the theological library.
 
 import json
 import logging
+import time
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -64,25 +65,48 @@ def _log_section(title: str, content: str, max_len: int = 0):
 
 
 # =============================================================================
-# Tool Wrapper for Logging
+# Tool Wrapper for Logging with Timing
 # =============================================================================
 
+# Per-request tool timing storage (reset each request)
+_tool_timings: list[tuple[str, float]] = []
+
+
+def _reset_tool_timings():
+    """Reset tool timings for a new request."""
+    global _tool_timings
+    _tool_timings = []
+
+
+def _get_tool_timings() -> list[tuple[str, float]]:
+    """Get tool timings for current request."""
+    return _tool_timings
+
+
 def _wrap_tool_with_logging(tool: dspy.Tool) -> dspy.Tool:
-    """Wrap a tool's function to log inputs and outputs."""
+    """Wrap a tool's function to log inputs, outputs, and timing."""
     original_func = tool.func
 
     @wraps(original_func)
     async def logged_func(*args, **kwargs):
+        global _tool_timings
+
         # Log tool invocation
         chat_logger.debug("")
         chat_logger.debug(f">>> TOOL CALL: {tool.name}")
         chat_logger.debug(f"    Arguments: {json.dumps(kwargs, default=str)}")
 
+        start_time = time.perf_counter()
         try:
             result = await original_func(*args, **kwargs)
+            elapsed = time.perf_counter() - start_time
 
-            # Log result (truncate if very long)
+            # Record timing
+            _tool_timings.append((tool.name, elapsed))
+
+            # Log result with timing
             result_str = str(result)
+            chat_logger.debug(f"    Time: {elapsed:.3f}s")
             if len(result_str) > 2000:
                 chat_logger.debug(f"    Result: {result_str[:2000]}")
                 chat_logger.debug(f"    ... [{len(result_str) - 2000} more chars]")
@@ -92,6 +116,9 @@ def _wrap_tool_with_logging(tool: dspy.Tool) -> dspy.Tool:
             return result
 
         except Exception as e:
+            elapsed = time.perf_counter() - start_time
+            _tool_timings.append((tool.name, elapsed))
+            chat_logger.debug(f"    Time: {elapsed:.3f}s")
             chat_logger.debug(f"    ERROR: {e}")
             raise
 
@@ -116,7 +143,7 @@ SYSTEM_PROMPT = (PROMPTS_DIR / "osb_agent_system_prompt.md").read_text()
 
 # Agent configuration
 MAX_RETRIES = 3
-MAX_TOOL_ITERATIONS = 5
+MAX_TOOL_ITERATIONS = 10
 
 
 # =============================================================================
@@ -181,6 +208,8 @@ class OSBAgent:
             ChatResponse with assistant message and tool call log
         """
         request_id = datetime.now().strftime("%H%M%S%f")[:10]
+        request_start = time.perf_counter()
+        _reset_tool_timings()
 
         if not messages:
             return ChatResponse(
@@ -206,7 +235,6 @@ class OSBAgent:
         chat_logger.debug(f"Reading Context: {reading_context.model_dump() if reading_context else 'None'}")
         chat_logger.debug(f"Message Count: {len(messages)}")
 
-        _log_section("SYSTEM PROMPT", system_str)
         _log_section("READING CONTEXT (built)", context_str)
         _log_section("CONVERSATION HISTORY", history_str)
         _log_section("CURRENT QUESTION", question_str)
@@ -237,10 +265,19 @@ class OSBAgent:
                     # ==========================================================
                     _log_section("FINAL ANSWER", result.answer)
 
+                    # Timing summary
+                    total_time = time.perf_counter() - request_start
+                    tool_timings = _get_tool_timings()
+                    total_tool_time = sum(t for _, t in tool_timings)
+
                     chat_logger.debug("")
+                    chat_logger.debug("--- TIMING SUMMARY ---")
+                    chat_logger.debug(f"Total request time: {total_time:.3f}s")
+                    chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
+                    chat_logger.debug(f"LLM/other time:     {total_time - total_tool_time:.3f}s")
                     chat_logger.debug(f"Tool calls made: {len(tool_calls)}")
-                    for tc in tool_calls:
-                        chat_logger.debug(f"  - {tc.name}({tc.arguments})")
+                    for name, elapsed in tool_timings:
+                        chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
 
                     _log_separator(f"END REQUEST [{request_id}]")
 
@@ -268,8 +305,18 @@ class OSBAgent:
                 logger.warning(f"ReAct attempt {attempt + 1} failed: {e}")
 
         # All retries exhausted
+        total_time = time.perf_counter() - request_start
+        tool_timings = _get_tool_timings()
+        total_tool_time = sum(t for _, t in tool_timings)
+
         chat_logger.debug("")
         chat_logger.debug(f"ALL RETRIES EXHAUSTED. Last error: {last_error}")
+        chat_logger.debug("")
+        chat_logger.debug("--- TIMING SUMMARY (FAILED) ---")
+        chat_logger.debug(f"Total request time: {total_time:.3f}s")
+        chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
+        for name, elapsed in tool_timings:
+            chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
         _log_separator(f"END REQUEST [{request_id}] - FAILED")
 
         logger.error(f"All {MAX_RETRIES} attempts failed. Last error: {last_error}")

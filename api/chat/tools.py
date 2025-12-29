@@ -10,7 +10,7 @@ import dspy
 
 from api.models.common import AnnotationType, ExpandMode
 from api.models.library import LibraryExpandMode
-from api.services import annotation_service, book_service, context_service, library_service, passage_service
+from api.services import annotation_service, book_service, context_service, library_service, passage_service, vector_search_service
 
 
 async def get_passage(passage_id: str, include_annotations: bool = False) -> str:
@@ -426,6 +426,106 @@ async def get_library_content(work_id: str, node_id: str) -> str:
     return "\n".join(lines)
 
 
+async def search_osb_content(query: str) -> str:
+    """
+    Semantic search across OSB study notes, articles, and Scripture text.
+
+    Use this when the user asks about a theological topic, doctrine, or theme and you need
+    to find relevant study notes or Scripture passages. Returns up to 5 results above the relevance threshold.
+
+    Args:
+        query: Natural language search query — specify subject + type of answer sought.
+               Good: "Jacob's Ladder typology", "fasting ascetic practice"
+               Bad: "Jacob's Ladder typology Christ Theotokos" (pre-judges the answer)
+
+    Returns:
+        Relevant results with source type, IDs for follow-up, and full chunk text
+    """
+    results = await vector_search_service.search_osb(query, top_k=5)
+
+    if not results:
+        return f"No OSB results found for: {query}"
+
+    lines = [
+        f"**OSB Semantic Search:** \"{query}\"",
+        f"Found {len(results)} relevant results:",
+        "",
+    ]
+
+    for i, r in enumerate(results, 1):
+        lines.append(f"**[{i}] {r.source_type}** (score: {r.score:.3f})")
+
+        # Provide the right IDs based on source type
+        if r.source_type == "osb_study":
+            lines.append(f"  - annotation_id: `{r.annotation_id}` (use get_study_note to read full note)")
+            if r.book_name and r.chapter:
+                verse_display = f"{r.verse_start}" if r.verse_start else ""
+                if r.verse_end and r.verse_end != r.verse_start:
+                    verse_display += f"-{r.verse_end}"
+                lines.append(f"  - passage: {r.book_name} {r.chapter}:{verse_display}")
+            if r.passage_ids:
+                lines.append(f"  - passage_ids: {r.passage_ids[:3]}{'...' if len(r.passage_ids) > 3 else ''}")
+
+        elif r.source_type == "osb_article":
+            lines.append(f"  - annotation_id: `{r.annotation_id}` (use get_study_note to read full article)")
+
+        elif r.source_type == "osb_chapter":
+            lines.append(f"  - book_id: `{r.book_id}`, chapter: {r.chapter}")
+            lines.append(f"  - (use get_chapter to read full chapter)")
+
+        # Full chunk text (chunks are pre-sized ~1500 chars from ETL)
+        lines.append(f"  **Text:** {r.text}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+async def search_library_content(query: str) -> str:
+    """
+    Semantic search across the theological library (patristic works, spiritual texts).
+
+    Use this when the user asks "What do the Fathers say about X?" or when you need
+    to find relevant patristic commentary on a topic. Returns up to 5 chunks above the relevance threshold.
+
+    Args:
+        query: Natural language search query — specify subject + type of answer sought.
+               Good: "Jesus Prayer hesychast practice", "humility patristic teaching"
+               Bad: "humility pride spiritual warfare" (too many concepts)
+
+    Returns:
+        Relevant chunks with work/node IDs and full chunk text
+    """
+    results = await vector_search_service.search_library(query, top_k=5)
+
+    if not results:
+        return f"No library results found for: {query}"
+
+    lines = [
+        f"**Library Semantic Search:** \"{query}\"",
+        f"Found {len(results)} relevant results:",
+        "",
+    ]
+
+    for i, r in enumerate(results, 1):
+        title = r.node_title or r.node_id
+        lines.append(f"**[{i}] {title}** (score: {r.score:.3f})")
+        lines.append(f"  - work_id: `{r.work_id}`")
+        lines.append(f"  - node_id: `{r.node_id}` (use get_library_content for full section)")
+        if r.author_id:
+            lines.append(f"  - author_id: `{r.author_id}`")
+        if r.scripture_refs:
+            refs = r.scripture_refs[:5]
+            lines.append(f"  - scripture_refs: {refs}{'...' if len(r.scripture_refs) > 5 else ''}")
+
+        # Full chunk text (chunks are pre-sized ~1500 chars from ETL)
+        lines.append(f"  **Text:** {r.text}")
+        lines.append("")
+
+    lines.append("*Use get_library_content(work_id, node_id) if you need surrounding context.*")
+
+    return "\n".join(lines)
+
+
 # Build the TOOLS list for DSPy
 TOOLS = [
     dspy.Tool(
@@ -467,5 +567,15 @@ TOOLS = [
         func=get_library_content,
         name="get_library_content",
         desc="Read content from a specific section of a library work.",
+    ),
+    dspy.Tool(
+        func=search_osb_content,
+        name="search_osb_content",
+        desc="Semantic search across OSB study notes, articles, and Scripture. Use for theological topics.",
+    ),
+    dspy.Tool(
+        func=search_library_content,
+        name="search_library_content",
+        desc="Semantic search across patristic works. Use when asked 'What do the Fathers say about X?'",
     ),
 ]

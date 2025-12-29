@@ -1,0 +1,218 @@
+"""Vector search service for semantic search across OSB and Library content.
+
+Uses Pinecone for vector storage and Voyage AI for embeddings.
+Provides search functions optimized for the chat agent's tool usage.
+"""
+
+import logging
+from dataclasses import dataclass
+from typing import Optional
+
+from api.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Lazy-loaded clients
+_voyage_client = None
+_pinecone_index = None
+
+
+def _get_voyage_client():
+    """Lazy initialization of Voyage AI client."""
+    global _voyage_client
+    if _voyage_client is None:
+        if not settings.voyage_api_key:
+            raise ValueError("VOYAGE_API_KEY not configured")
+        import voyageai
+        _voyage_client = voyageai.Client(api_key=settings.voyage_api_key)
+    return _voyage_client
+
+
+def _get_pinecone_index():
+    """Lazy initialization of Pinecone index."""
+    global _pinecone_index
+    if _pinecone_index is None:
+        if not settings.pinecone_api_key:
+            raise ValueError("PINECONE_API_KEY not configured")
+        from pinecone import Pinecone
+        pc = Pinecone(api_key=settings.pinecone_api_key)
+        _pinecone_index = pc.Index(settings.pinecone_index_name)
+    return _pinecone_index
+
+
+def _embed_query(query: str) -> list[float]:
+    """Generate embedding for a search query using Voyage AI."""
+    client = _get_voyage_client()
+    result = client.embed(
+        texts=[query],
+        model=settings.embedding_model_name,
+        input_type="query",
+        output_dimension=2048,
+    )
+    return result.embeddings[0]
+
+
+@dataclass
+class OSBSearchResult:
+    """A single OSB search result with resolved metadata."""
+    source_type: str  # osb_study, osb_article, osb_chapter
+    score: float
+    text: str
+    # For study notes and articles
+    annotation_id: Optional[str] = None
+    # For all types
+    book_id: Optional[str] = None
+    book_name: Optional[str] = None
+    chapter: Optional[int] = None
+    verse_start: Optional[int] = None
+    verse_end: Optional[int] = None
+    passage_ids: Optional[list[str]] = None
+
+
+@dataclass
+class LibrarySearchResult:
+    """A single library search result."""
+    score: float
+    text: str
+    work_id: str
+    node_id: str
+    node_title: Optional[str] = None
+    author_id: Optional[str] = None
+    chunk_sequence: Optional[int] = None
+    scripture_refs: Optional[list[str]] = None
+
+
+async def search_osb(
+    query: str,
+    top_k: int = 3,
+    source_type_filter: Optional[str] = None,
+) -> list[OSBSearchResult]:
+    """Search OSB content (study notes, articles, chapter text).
+
+    Args:
+        query: Natural language search query
+        top_k: Number of results to return
+        source_type_filter: Optional filter for source_type (osb_study, osb_article, osb_chapter)
+
+    Returns:
+        List of OSBSearchResult with resolved metadata
+    """
+    try:
+        query_embedding = _embed_query(query)
+        index = _get_pinecone_index()
+
+        # Build filter if specified
+        filter_dict = None
+        if source_type_filter:
+            filter_dict = {"source_type": {"$eq": source_type_filter}}
+
+        results = index.query(
+            vector=query_embedding,
+            top_k=top_k,
+            filter=filter_dict,
+            namespace="osb",
+            include_metadata=True,
+        )
+
+        search_results = []
+        min_score = settings.vector_search_min_score
+
+        for match in results.matches:
+            # Filter by score threshold
+            if match.score < min_score:
+                continue
+
+            meta = match.metadata or {}
+
+            result = OSBSearchResult(
+                source_type=meta.get("source_type", "unknown"),
+                score=match.score,
+                text=meta.get("text", ""),
+                annotation_id=meta.get("annotation_id"),
+                book_id=meta.get("book_id"),
+                book_name=meta.get("book_name"),
+                chapter=meta.get("chapter"),
+                verse_start=meta.get("verse_start"),
+                verse_end=meta.get("verse_end"),
+                passage_ids=meta.get("passage_ids"),
+            )
+            search_results.append(result)
+
+        return search_results
+
+    except Exception as e:
+        logger.error(f"OSB search failed: {e}")
+        # Also log to chat logger so it appears in chat.log
+        import logging
+        chat_logger = logging.getLogger("api.chat.llm")
+        chat_logger.debug(f"    !!! SEARCH ERROR: {e}")
+        return []
+
+
+async def search_library(
+    query: str,
+    top_k: int = 3,
+    author_filter: Optional[str] = None,
+    work_filter: Optional[str] = None,
+) -> list[LibrarySearchResult]:
+    """Search library content (patristic works, spiritual texts).
+
+    Args:
+        query: Natural language search query
+        top_k: Number of results to return
+        author_filter: Optional filter by author_id
+        work_filter: Optional filter by work_id
+
+    Returns:
+        List of LibrarySearchResult with chunk text and node IDs
+    """
+    try:
+        query_embedding = _embed_query(query)
+        index = _get_pinecone_index()
+
+        # Build filter
+        filter_dict = {}
+        if author_filter:
+            filter_dict["author_id"] = {"$eq": author_filter}
+        if work_filter:
+            filter_dict["work_id"] = {"$eq": work_filter}
+
+        results = index.query(
+            vector=query_embedding,
+            top_k=top_k,
+            filter=filter_dict if filter_dict else None,
+            namespace="library",
+            include_metadata=True,
+        )
+
+        search_results = []
+        min_score = settings.vector_search_min_score
+
+        for match in results.matches:
+            # Filter by score threshold
+            if match.score < min_score:
+                continue
+
+            meta = match.metadata or {}
+
+            result = LibrarySearchResult(
+                score=match.score,
+                text=meta.get("text", ""),
+                work_id=meta.get("work_id", ""),
+                node_id=meta.get("node_id", ""),
+                node_title=meta.get("node_title"),
+                author_id=meta.get("author_id"),
+                chunk_sequence=meta.get("chunk_sequence"),
+                scripture_refs=meta.get("scripture_refs"),
+            )
+            search_results.append(result)
+
+        return search_results
+
+    except Exception as e:
+        logger.error(f"Library search failed: {e}")
+        # Also log to chat logger so it appears in chat.log
+        import logging
+        chat_logger = logging.getLogger("api.chat.llm")
+        chat_logger.debug(f"    !!! SEARCH ERROR: {e}")
+        return []
