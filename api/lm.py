@@ -50,7 +50,7 @@ MODELS: dict[str, ModelConfig] = {
         litellm_id="openrouter/z-ai/glm-4.7",
         providers=["z-ai", "novita", "parasail"],
         temperature=0.6,
-        max_tokens=8192,
+        max_tokens=16000,
     ),
     "gemini-pro": ModelConfig(
         litellm_id="openrouter/google/gemini-3-pro-preview",
