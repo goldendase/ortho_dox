@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     voyage_api_key: str = ""
     embedding_model_name: str = "voyage-3-large"
     vector_search_min_score: float = 0.35  # Minimum similarity score (dotproduct, 0-1 range)
+    vector_search_judge_enabled: bool = False  # Enable Gemini Flash relevance judge for search results
 
     model_config = SettingsConfigDict(
         env_file=".env",

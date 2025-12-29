@@ -17,7 +17,7 @@ import dspy
 
 from api.chat.context_builder import build_context
 from api.chat.history import compact_history
-from api.chat.tools import TOOLS as RAW_TOOLS
+from api.chat.tools import TOOLS as RAW_TOOLS, set_chat_context
 from api.models.chat import ChatMessage, ChatResponse, MessageRole, ReadingContext, ToolCall
 
 logger = logging.getLogger(__name__)
@@ -241,6 +241,11 @@ class OSBAgent:
 
         chat_logger.debug("")
         chat_logger.debug("--- TOOL EXECUTION LOG ---")
+
+        # Set chat context for relevance judge in search tools
+        # Include history + current question so judge has full context
+        judge_context = f"{history_str}\n\nUser: {question_str}" if history_str else f"User: {question_str}"
+        set_chat_context(judge_context)
 
         # Retry loop
         last_error = None

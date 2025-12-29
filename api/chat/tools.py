@@ -6,9 +6,38 @@ Tools are designed to drill down into specific items identified in the upfront c
 Key principle: Return what the LLM needs to formulate a response, not raw data structures.
 """
 
+from contextvars import ContextVar
+
 import dspy
 
 from api.models.common import AnnotationType, ExpandMode
+
+
+# =============================================================================
+# Chat Context Holder
+# =============================================================================
+# Stores the current chat context so tools (especially search) can access
+# conversation history for relevance judging. Uses ContextVar for async safety.
+
+_chat_context: ContextVar[str] = ContextVar("chat_context", default="")
+
+
+def set_chat_context(context: str) -> None:
+    """Set the current chat context for tool access.
+
+    Called by the agent before executing ReAct to provide conversation history
+    to search tools for relevance judging.
+    """
+    _chat_context.set(context)
+
+
+def get_chat_context() -> str:
+    """Get the current chat context."""
+    return _chat_context.get()
+
+
+from api.chat.judge import filter_by_relevance
+from api.config import settings
 from api.models.library import LibraryExpandMode
 from api.services import annotation_service, book_service, context_service, library_service, passage_service, vector_search_service
 
@@ -430,8 +459,9 @@ async def search_osb_content(query: str) -> str:
     """
     Semantic search across OSB study notes, articles, and Scripture text.
 
-    Use this when the user asks about a theological topic, doctrine, or theme and you need
-    to find relevant study notes or Scripture passages. Returns up to 5 results above the relevance threshold.
+    For most theological questions, search BOTH this and search_library_content to get
+    comprehensive Scripture + patristic perspectives. Only skip library search if the user
+    explicitly asks for Scripture-only or a specific biblical book.
 
     Args:
         query: Natural language search query — specify subject + type of answer sought.
@@ -439,12 +469,26 @@ async def search_osb_content(query: str) -> str:
                Bad: "Jacob's Ladder typology Christ Theotokos" (pre-judges the answer)
 
     Returns:
-        Relevant results with source type, IDs for follow-up, and full chunk text
+        Relevant results with source type, IDs, and full text (study notes include complete content)
     """
     results = await vector_search_service.search_osb(query, top_k=5)
 
     if not results:
         return f"No OSB results found for: {query}"
+
+    # Filter results through relevance judge using chat context (if enabled)
+    if settings.vector_search_judge_enabled:
+        chat_context = get_chat_context()
+        if chat_context:
+            results = await filter_by_relevance(
+                results=results,
+                query=query,
+                chat_context=chat_context,
+                text_extractor=lambda r: r.text,
+            )
+
+        if not results:
+            return f"No relevant OSB results found for: {query} (all results filtered by relevance judge)"
 
     lines = [
         f"**OSB Semantic Search:** \"{query}\"",
@@ -457,7 +501,7 @@ async def search_osb_content(query: str) -> str:
 
         # Provide the right IDs based on source type
         if r.source_type == "osb_study":
-            lines.append(f"  - annotation_id: `{r.annotation_id}` (use get_study_note to read full note)")
+            lines.append(f"  - annotation_id: `{r.annotation_id}`")
             if r.book_name and r.chapter:
                 verse_display = f"{r.verse_start}" if r.verse_start else ""
                 if r.verse_end and r.verse_end != r.verse_start:
@@ -467,7 +511,7 @@ async def search_osb_content(query: str) -> str:
                 lines.append(f"  - passage_ids: {r.passage_ids[:3]}{'...' if len(r.passage_ids) > 3 else ''}")
 
         elif r.source_type == "osb_article":
-            lines.append(f"  - annotation_id: `{r.annotation_id}` (use get_study_note to read full article)")
+            lines.append(f"  - annotation_id: `{r.annotation_id}`")
 
         elif r.source_type == "osb_chapter":
             lines.append(f"  - book_id: `{r.book_id}`, chapter: {r.chapter}")
@@ -484,8 +528,9 @@ async def search_library_content(query: str) -> str:
     """
     Semantic search across the theological library (patristic works, spiritual texts).
 
-    Use this when the user asks "What do the Fathers say about X?" or when you need
-    to find relevant patristic commentary on a topic. Returns up to 5 chunks above the relevance threshold.
+    For most theological questions, search BOTH this and search_osb_content to get
+    comprehensive patristic + Scripture perspectives. Only skip OSB search if the user
+    explicitly asks for patristic-only or a specific Father's writings.
 
     Args:
         query: Natural language search query — specify subject + type of answer sought.
@@ -493,12 +538,26 @@ async def search_library_content(query: str) -> str:
                Bad: "humility pride spiritual warfare" (too many concepts)
 
     Returns:
-        Relevant chunks with work/node IDs and full chunk text
+        Relevant chunks with work/node IDs and full text
     """
     results = await vector_search_service.search_library(query, top_k=5)
 
     if not results:
         return f"No library results found for: {query}"
+
+    # Filter results through relevance judge using chat context (if enabled)
+    if settings.vector_search_judge_enabled:
+        chat_context = get_chat_context()
+        if chat_context:
+            results = await filter_by_relevance(
+                results=results,
+                query=query,
+                chat_context=chat_context,
+                text_extractor=lambda r: r.text,
+            )
+
+        if not results:
+            return f"No relevant library results found for: {query} (all results filtered by relevance judge)"
 
     lines = [
         f"**Library Semantic Search:** \"{query}\"",
@@ -520,8 +579,6 @@ async def search_library_content(query: str) -> str:
         # Full chunk text (chunks are pre-sized ~1500 chars from ETL)
         lines.append(f"  **Text:** {r.text}")
         lines.append("")
-
-    lines.append("*Use get_library_content(work_id, node_id) if you need surrounding context.*")
 
     return "\n".join(lines)
 
@@ -571,11 +628,11 @@ TOOLS = [
     dspy.Tool(
         func=search_osb_content,
         name="search_osb_content",
-        desc="Semantic search across OSB study notes, articles, and Scripture. Use for theological topics.",
+        desc="Semantic search across OSB study notes, articles, and Scripture. For theological topics, typically search BOTH this and search_library_content to get Scripture + patristic perspectives.",
     ),
     dspy.Tool(
         func=search_library_content,
         name="search_library_content",
-        desc="Semantic search across patristic works. Use when asked 'What do the Fathers say about X?'",
+        desc="Semantic search across patristic works and spiritual texts. For theological topics, typically search BOTH this and search_osb_content to get patristic + Scripture perspectives.",
     ),
 ]
