@@ -7,21 +7,52 @@ from pydantic import BaseModel, Field
 from api.models.common import PaginatedResponse
 
 
-class WorkCategory(str, Enum):
-    """Categories for library works."""
-
-    PATRISTIC = "patristic"
-    BIOGRAPHY = "biography"
-    CHURCH_HISTORY = "church_history"
-    SPIRITUAL = "spiritual"
-    LITURGICAL = "liturgical"
-    THEOLOGICAL = "theological"
+# --- Enums ---
 
 
-class AuthorRole(str, Enum):
-    """Roles an author can have."""
+class Era(str, Enum):
+    """Historical eras for library works."""
 
-    AUTHOR = "author"
+    APOSTOLIC = "apostolic"      # 1st-2nd century
+    NICENE = "nicene"            # 3rd-5th century
+    BYZANTINE = "byzantine"      # 6th-15th century
+    EARLY_MODERN = "early_modern"  # 16th-19th century
+    MODERN = "modern"            # 20th century+
+
+
+class Tradition(str, Enum):
+    """Religious tradition of the work."""
+
+    EASTERN_ORTHODOX = "eastern_orthodox"
+    ORIENTAL_ORTHODOX = "oriental_orthodox"
+    CATHOLIC = "catholic"
+    PROTESTANT = "protestant"
+    ECUMENICAL = "ecumenical"
+    HERETICAL = "heretical"
+
+
+class WorkType(str, Enum):
+    """Types of library works."""
+
+    COMMENTARY = "commentary"    # Scripture exegesis (verse-by-verse, book-by-book)
+    ASCETICAL = "ascetical"      # Prayer, spiritual practice, inner life
+    PASTORAL = "pastoral"        # Letters, practical guidance, formation
+    DOCTRINAL = "doctrinal"      # Theological teaching, topical homilies
+    HISTORICAL = "historical"    # Lives of saints, biographies, church history
+
+
+class ReadingLevel(str, Enum):
+    """Reading difficulty level."""
+
+    INQUIRER = "inquirer"        # Accessible to newcomers
+    CATECHUMEN = "catechumen"    # Some familiarity helpful
+    FAITHFUL = "faithful"        # Assumes basic Orthodox knowledge
+    SCHOLAR = "scholar"          # Academic, dense
+
+
+class ContributorRole(str, Enum):
+    """Roles a contributor can have."""
+
     TRANSLATOR = "translator"
     EDITOR = "editor"
     COMPILER = "compiler"
@@ -47,49 +78,14 @@ class LibraryExpandMode(str, Enum):
     FULL = "full"
 
 
-# --- Author Models ---
+# --- Contributor Model ---
 
 
-class AuthorSummary(BaseModel):
-    """Brief author info for work listings."""
+class Contributor(BaseModel):
+    """Contributor to a work (translator, editor, compiler)."""
 
-    id: str
     name: str
-    role: AuthorRole
-
-
-class AuthorDetail(BaseModel):
-    """Full author details."""
-
-    id: str
-    name: str
-    role: AuthorRole = AuthorRole.AUTHOR
-    dates: str | None = None
-    description: str | None = None
-
-
-class AuthorWithCount(BaseModel):
-    """Author info with work count for author listings."""
-
-    id: str
-    name: str
-    dates: str | None = None
-    work_count: int = 0
-
-
-class AuthorListResponse(BaseModel):
-    """Response for listing authors."""
-
-    authors: list[AuthorWithCount]
-    total: int
-
-
-class AuthorWorksResponse(BaseModel):
-    """Response for author's works."""
-
-    author: AuthorSummary
-    works: list["WorkSummary"]
-    total: int
+    role: ContributorRole
 
 
 # --- Component Models ---
@@ -191,7 +187,7 @@ class NodeFull(NodeWithComponents):
     """Full node with all context (expand=full)."""
 
     work_title: str | None = None
-    author: AuthorSummary | None = None
+    author: str | None = None  # Resolved author display name
     scripture_refs: list["ScriptureRefTarget"] = []
 
 
@@ -204,9 +200,14 @@ class WorkSummary(BaseModel):
     id: str
     title: str
     subtitle: str | None = None
-    authors: list[AuthorSummary] = []
-    category: WorkCategory
-    subjects: list[str] = []
+    description: str | None = None
+    notes: str | None = None  # Edition/translation caveats
+    author: str  # Resolved display name
+    contributors: list[Contributor] = []
+    work_type: WorkType
+    era: Era
+    reading_level: ReadingLevel
+    tags: list[str] = []
     node_count: int = 0
     has_images: bool = False
 
@@ -217,13 +218,18 @@ class WorkDetail(BaseModel):
     id: str
     title: str
     subtitle: str | None = None
-    authors: list[AuthorDetail] = []
-    publisher: str | None = None
-    publication_date: str | None = None
-    isbn: str | None = None
-    category: WorkCategory
-    subjects: list[str] = []
-    source_format: str | None = None
+    description: str | None = None
+    relevance: str | None = None
+    notes: str | None = None
+    author: str  # Resolved display name
+    contributors: list[Contributor] = []
+    work_type: WorkType
+    era: Era
+    tradition: Tradition
+    reading_level: ReadingLevel
+    tags: list[str] = []
+    cover_image: str | None = None
+    publication_year: int | None = None
     node_count: int = 0
     leaf_count: int = 0
     scripture_ref_count: int = 0
@@ -240,6 +246,25 @@ class WorkTOCResponse(BaseModel):
 
     work_id: str
     root: NodeTOC
+
+
+# --- Filter Models ---
+
+
+class FilterAuthor(BaseModel):
+    """Author info for filter dropdown."""
+
+    name: str
+    work_count: int
+
+
+class FiltersResponse(BaseModel):
+    """Available filter values for the library index."""
+
+    authors: list[FilterAuthor]
+    work_types: list[str]
+    eras: list[str]
+    reading_levels: list[str]
 
 
 # --- Scripture Reference Models ---
@@ -278,13 +303,6 @@ class ScriptureRefsResponse(PaginatedResponse):
 # --- Library Refs for OSB Integration ---
 
 
-class LibraryRefAuthor(BaseModel):
-    """Minimal author info for library refs."""
-
-    id: str
-    name: str
-
-
 class LibraryRef(BaseModel):
     """Reference from library to OSB passage."""
 
@@ -292,7 +310,7 @@ class LibraryRef(BaseModel):
     work_title: str
     node_id: str
     node_title: str | None = None
-    author: LibraryRefAuthor | None = None
+    author: str | None = None  # Resolved display name
     reference_text: str
     context_snippet: str | None = None  # ~100 chars around the reference
 
@@ -313,11 +331,10 @@ class LibraryContextResponse(BaseModel):
     """Rich context bundle for MCP consumption."""
 
     node: NodeWithComponents
-    author: AuthorDetail | None = None
+    author: str | None = None  # Resolved display name
     scripture_references: list[ScriptureRefTarget] = []
     navigation: NodeNavigation
 
 
 # Update forward refs
 NodeTOC.model_rebuild()
-AuthorWorksResponse.model_rebuild()

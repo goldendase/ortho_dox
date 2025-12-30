@@ -267,8 +267,8 @@
 				{#if libraryStore.currentWork && libraryStore.toc}
 					<div class="current-work">
 						<h3 class="work-title">{libraryStore.currentWork.title}</h3>
-						{#if libraryStore.currentWork.authors?.length}
-							<p class="work-author">{libraryStore.currentWork.authors[0].name}</p>
+						{#if libraryStore.currentWork.author}
+							<p class="work-author">{libraryStore.currentWork.author}</p>
 						{/if}
 
 						<div class="toc-tree">

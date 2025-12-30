@@ -1,45 +1,28 @@
 /**
  * Library Browse Page Server Load
  *
- * Loads the list of works for browsing.
+ * Loads all works and filter options for client-side filtering.
+ * With ~41 works, we load everything upfront for instant filtering.
  */
 
 import type { PageServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
-import { library, type LibraryCategory } from '$lib/api';
+import { library } from '$lib/api';
 
-const VALID_CATEGORIES: LibraryCategory[] = [
-	'patristic',
-	'biography',
-	'church_history',
-	'spiritual',
-	'liturgical',
-	'theological'
-];
-
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals }) => {
 	// Auth check
 	if (!locals.authSecret) {
 		throw redirect(303, '/auth');
 	}
 
-	// Get category filter from query params - validate against allowed values
-	const rawCategory = url.searchParams.get('category');
-	const category = rawCategory && VALID_CATEGORIES.includes(rawCategory as LibraryCategory)
-		? (rawCategory as LibraryCategory)
-		: undefined;
-
-	const author = url.searchParams.get('author') || undefined;
-
-	const worksData = await library.listWorks(
-		{ category, author, limit: 50 },
-		{ authSecret: locals.authSecret }
-	);
+	// Load all works and filter options in parallel
+	const [worksData, filters] = await Promise.all([
+		library.listWorks({ limit: 100 }, { authSecret: locals.authSecret }),
+		library.getFilters({ authSecret: locals.authSecret })
+	]);
 
 	return {
 		works: worksData.works,
-		total: worksData.total,
-		category,
-		author
+		filters
 	};
 };

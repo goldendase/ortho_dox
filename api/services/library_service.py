@@ -2,20 +2,18 @@
 
 from api.db import MongoDB
 from api.models.library import (
-    AuthorDetail,
-    AuthorListResponse,
-    AuthorRole,
-    AuthorSummary,
-    AuthorWithCount,
-    AuthorWorksResponse,
     ComponentsGroup,
     ComponentType,
+    Contributor,
+    ContributorRole,
+    Era,
+    FilterAuthor,
+    FiltersResponse,
     FootnoteComponent,
     ImageComponent,
     LibraryContextResponse,
     LibraryExpandMode,
     LibraryRef,
-    LibraryRefAuthor,
     NodeFull,
     NodeMinimal,
     NodeNavigation,
@@ -24,23 +22,59 @@ from api.models.library import (
     NodeWithComponents,
     PassageLibraryRefsResponse,
     QuoteComponent,
+    ReadingLevel,
     ScriptureRefDetail,
     ScriptureRefsResponse,
     ScriptureRefTarget,
-    WorkCategory,
+    Tradition,
     WorkDetail,
     WorkListResponse,
     WorkSummary,
     WorkTOCResponse,
+    WorkType,
 )
+
+
+# --- Author Resolution ---
+
+
+async def _resolve_author_name(author_id: str | None) -> str:
+    """Resolve author_id to display_name from library_authors.
+
+    Returns 'Unknown' if author_id is None or not found.
+    """
+    if not author_id:
+        return "Unknown"
+    db = MongoDB.db_dox
+    author = await db.library_authors.find_one({"_id": author_id}, {"display_name": 1})
+    if author:
+        return author.get("display_name", author_id)
+    return author_id  # Fallback to ID if not found
+
+
+async def _resolve_author_names(author_ids: list[str]) -> dict[str, str]:
+    """Batch resolve multiple author_ids to display_names.
+
+    Returns dict mapping author_id -> display_name.
+    """
+    if not author_ids:
+        return {}
+    db = MongoDB.db_dox
+    authors = await db.library_authors.find(
+        {"_id": {"$in": author_ids}},
+        {"_id": 1, "display_name": 1}
+    ).to_list(length=None)
+    return {a["_id"]: a.get("display_name", a["_id"]) for a in authors}
 
 
 # --- Works ---
 
 
 async def get_works(
-    category: WorkCategory | None = None,
-    author_id: str | None = None,
+    work_type: WorkType | None = None,
+    era: Era | None = None,
+    reading_level: ReadingLevel | None = None,
+    author: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> WorkListResponse:
@@ -48,18 +82,24 @@ async def get_works(
     db = MongoDB.db_dox
 
     # Build query filter
-    query = {}
-    if category:
-        query["category"] = category.value
-    if author_id:
-        query["authors.id"] = author_id
+    query: dict = {}
+    if work_type:
+        query["work_type"] = work_type.value
+    if era:
+        query["era"] = era.value
+    if reading_level:
+        query["reading_level"] = reading_level.value
 
     # Get works
     works_cursor = db.library_works.find(query).skip(offset).limit(limit)
     works_raw = await works_cursor.to_list(length=limit)
 
-    # Get total count
+    # Get total count (before author filtering - we filter in Python for name matching)
     total = await db.library_works.count_documents(query)
+
+    # Batch resolve author names
+    author_ids = list({w.get("author_id") for w in works_raw if w.get("author_id")})
+    author_names = await _resolve_author_names(author_ids)
 
     # Get node counts per work
     node_stats = await db.library_nodes.aggregate([
@@ -80,24 +120,42 @@ async def get_works(
     works = []
     for work in works_raw:
         work_id = work["_id"]
+        author_name = author_names.get(work.get("author_id", ""), "Unknown")
+
+        # Filter by author name if specified
+        if author and author.lower() not in author_name.lower():
+            continue
+
         stats = stats_by_work.get(work_id, {})
+
+        # Parse contributors
+        contributors = [
+            Contributor(
+                name=c.get("name", ""),
+                role=ContributorRole(c.get("role", "translator")),
+            )
+            for c in work.get("contributors", [])
+        ]
+
         works.append(WorkSummary(
             id=work_id,
             title=work.get("title", ""),
             subtitle=work.get("subtitle"),
-            authors=[
-                AuthorSummary(
-                    id=a.get("id", ""),
-                    name=a.get("name", ""),
-                    role=AuthorRole(a.get("role", "author")),
-                )
-                for a in work.get("authors", [])
-            ],
-            category=WorkCategory(work.get("category", "theological")),
-            subjects=work.get("subjects", []),
+            description=work.get("description"),
+            notes=work.get("notes"),
+            author=author_name,
+            contributors=contributors,
+            work_type=WorkType(work.get("work_type", "doctrinal")),
+            era=Era(work.get("era", "modern")),
+            reading_level=ReadingLevel(work.get("reading_level", "faithful")),
+            tags=work.get("tags", []),
             node_count=stats.get("node_count", 0),
             has_images=work_id in works_with_images,
         ))
+
+    # Adjust total if we filtered by author name
+    if author:
+        total = len(works)
 
     return WorkListResponse(
         works=works,
@@ -115,6 +173,9 @@ async def get_work(work_id: str) -> WorkDetail | None:
     if not work:
         return None
 
+    # Resolve author name
+    author_name = await _resolve_author_name(work.get("author_id"))
+
     # Get node counts
     node_count = await db.library_nodes.count_documents({"book_id": work_id})
     leaf_count = await db.library_nodes.count_documents({"book_id": work_id, "is_leaf": True})
@@ -122,26 +183,31 @@ async def get_work(work_id: str) -> WorkDetail | None:
     # Get scripture ref count
     ref_count = await db.library_scripture_refs.count_documents({"book_id": work_id})
 
+    # Parse contributors
+    contributors = [
+        Contributor(
+            name=c.get("name", ""),
+            role=ContributorRole(c.get("role", "translator")),
+        )
+        for c in work.get("contributors", [])
+    ]
+
     return WorkDetail(
         id=work["_id"],
         title=work.get("title", ""),
         subtitle=work.get("subtitle"),
-        authors=[
-            AuthorDetail(
-                id=a.get("id", ""),
-                name=a.get("name", ""),
-                role=AuthorRole(a.get("role", "author")),
-                dates=a.get("dates"),
-                description=a.get("description"),
-            )
-            for a in work.get("authors", [])
-        ],
-        publisher=work.get("publisher"),
-        publication_date=work.get("publication_date"),
-        isbn=work.get("isbn"),
-        category=WorkCategory(work.get("category", "theological")),
-        subjects=work.get("subjects", []),
-        source_format=work.get("source_format"),
+        description=work.get("description"),
+        relevance=work.get("relevance"),
+        notes=work.get("notes"),
+        author=author_name,
+        contributors=contributors,
+        work_type=WorkType(work.get("work_type", "doctrinal")),
+        era=Era(work.get("era", "modern")),
+        tradition=Tradition(work.get("tradition", "eastern_orthodox")),
+        reading_level=ReadingLevel(work.get("reading_level", "faithful")),
+        tags=work.get("tags", []),
+        cover_image=work.get("cover_image"),
+        publication_year=work.get("publication_year"),
         node_count=node_count,
         leaf_count=leaf_count,
         scripture_ref_count=ref_count,
@@ -271,14 +337,9 @@ async def get_node(
 
     # expand == FULL
     work = await db.library_works.find_one({"_id": work_id})
-    author = None
-    if work and work.get("authors"):
-        a = work["authors"][0]
-        author = AuthorSummary(
-            id=a.get("id", ""),
-            name=a.get("name", ""),
-            role=AuthorRole(a.get("role", "author")),
-        )
+    author_name = None
+    if work:
+        author_name = await _resolve_author_name(work.get("author_id"))
 
     # Get scripture refs for this node
     scripture_refs = await _get_scripture_refs_for_node(work_id, node_id)
@@ -288,7 +349,7 @@ async def get_node(
         components=components,
         navigation=navigation,
         work_title=work.get("title") if work else None,
-        author=author,
+        author=author_name,
         scripture_refs=scripture_refs,
     )
 
@@ -499,109 +560,48 @@ def _flatten_to_leaves(nodes: list[dict]) -> list[dict]:
     return all_leaves
 
 
-# --- Authors ---
+# --- Filters ---
 
 
-async def get_authors(role: AuthorRole | None = None) -> AuthorListResponse:
-    """Get all authors with work counts."""
+async def get_filters() -> FiltersResponse:
+    """Get available filter values for the library index."""
     db = MongoDB.db_dox
 
-    # Aggregate authors from works
-    pipeline = [
-        {"$unwind": "$authors"},
+    # Get unique author_ids with work counts
+    author_pipeline = [
         {"$group": {
-            "_id": "$authors.id",
-            "name": {"$first": "$authors.name"},
-            "dates": {"$first": "$authors.dates"},
+            "_id": "$author_id",
             "work_count": {"$sum": 1},
         }},
-        {"$sort": {"name": 1}},
+        {"$sort": {"_id": 1}},
     ]
+    author_stats = await db.library_works.aggregate(author_pipeline).to_list(length=None)
 
-    if role:
-        pipeline.insert(1, {"$match": {"authors.role": role.value}})
-
-    authors_raw = await db.library_works.aggregate(pipeline).to_list(length=None)
+    # Resolve author names
+    author_ids = [a["_id"] for a in author_stats if a["_id"]]
+    author_names = await _resolve_author_names(author_ids)
 
     authors = [
-        AuthorWithCount(
-            id=a["_id"],  # _id from aggregation grouping
-            name=a.get("name", ""),
-            dates=a.get("dates"),
-            work_count=a.get("work_count", 0),
+        FilterAuthor(
+            name=author_names.get(a["_id"], a["_id"]),
+            work_count=a["work_count"],
         )
-        for a in authors_raw
+        for a in author_stats
+        if a["_id"]
     ]
+    # Sort by resolved name
+    authors.sort(key=lambda x: x.name)
 
-    return AuthorListResponse(authors=authors, total=len(authors))
+    # Get unique work types, eras, reading levels with works
+    work_types = await db.library_works.distinct("work_type")
+    eras = await db.library_works.distinct("era")
+    reading_levels = await db.library_works.distinct("reading_level")
 
-
-async def get_author(author_id: str) -> AuthorDetail | None:
-    """Get author details."""
-    db = MongoDB.db_dox
-
-    # Find author from any work
-    work = await db.library_works.find_one(
-        {"authors.id": author_id},
-        {"authors.$": 1}
-    )
-
-    if not work or not work.get("authors"):
-        return None
-
-    a = work["authors"][0]
-    return AuthorDetail(
-        id=a.get("id", author_id),
-        name=a.get("name", ""),
-        role=AuthorRole(a.get("role", "author")),
-        dates=a.get("dates"),
-        description=a.get("description"),
-    )
-
-
-async def get_author_works(author_id: str) -> AuthorWorksResponse | None:
-    """Get all works by an author."""
-    db = MongoDB.db_dox
-
-    # Get author info
-    author = await get_author(author_id)
-    if not author:
-        return None
-
-    # Get works
-    works_raw = await db.library_works.find(
-        {"authors.id": author_id}
-    ).to_list(length=None)
-
-    # Find the specific role for this author in each work
-    works = []
-    for work in works_raw:
-        author_role = AuthorRole.AUTHOR
-        for a in work.get("authors", []):
-            if a.get("id") == author_id:
-                author_role = AuthorRole(a.get("role", "author"))
-                break
-
-        works.append(WorkSummary(
-            id=work["_id"],
-            title=work.get("title", ""),
-            subtitle=work.get("subtitle"),
-            authors=[
-                AuthorSummary(
-                    id=a.get("id", ""),
-                    name=a.get("name", ""),
-                    role=AuthorRole(a.get("role", "author")),
-                )
-                for a in work.get("authors", [])
-            ],
-            category=WorkCategory(work.get("category", "theological")),
-            subjects=work.get("subjects", []),
-        ))
-
-    return AuthorWorksResponse(
-        author=AuthorSummary(id=author.id, name=author.name, role=author.role),
-        works=works,
-        total=len(works),
+    return FiltersResponse(
+        authors=authors,
+        work_types=[wt for wt in work_types if wt],
+        eras=[e for e in eras if e],
+        reading_levels=[rl for rl in reading_levels if rl],
     )
 
 
@@ -781,9 +781,13 @@ async def get_library_refs_for_passage(passage_id: str) -> PassageLibraryRefsRes
 
     works = await db.library_works.find(
         {"_id": {"$in": work_ids}},
-        {"_id": 1, "title": 1, "authors": 1}
+        {"_id": 1, "title": 1, "author_id": 1}
     ).to_list(length=None)
     works_by_id = {w["_id"]: w for w in works}
+
+    # Batch resolve author names
+    author_ids = list({w.get("author_id") for w in works if w.get("author_id")})
+    author_names = await _resolve_author_names(author_ids)
 
     nodes = await db.library_nodes.find(
         {"_id": {"$in": node_ids}},
@@ -799,10 +803,7 @@ async def get_library_refs_for_passage(passage_id: str) -> PassageLibraryRefsRes
         if not work:
             continue
 
-        author = None
-        if work.get("authors"):
-            a = work["authors"][0]
-            author = LibraryRefAuthor(id=a.get("id", ""), name=a.get("name", ""))
+        author_name = author_names.get(work.get("author_id", ""))
 
         # Get context snippet
         context_snippet = None
@@ -821,7 +822,7 @@ async def get_library_refs_for_passage(passage_id: str) -> PassageLibraryRefsRes
             work_title=work.get("title", ""),
             node_id=ref.get("source_node_id", ""),
             node_title=node.get("title") if node else None,
-            author=author,
+            author=author_name,
             reference_text=ref.get("reference_text", ""),
             context_snippet=context_snippet,
         ))
@@ -849,25 +850,18 @@ async def get_library_context(work_id: str, node_id: str) -> LibraryContextRespo
     if not node or not isinstance(node, NodeWithComponents):
         return None
 
-    # Get author
+    # Get author name
     work = await db.library_works.find_one({"_id": work_id})
-    author = None
-    if work and work.get("authors"):
-        a = work["authors"][0]
-        author = AuthorDetail(
-            id=a.get("id", ""),
-            name=a.get("name", ""),
-            role=AuthorRole(a.get("role", "author")),
-            dates=a.get("dates"),
-            description=a.get("description"),
-        )
+    author_name = None
+    if work:
+        author_name = await _resolve_author_name(work.get("author_id"))
 
     # Get scripture refs
     scripture_refs = await _get_scripture_refs_for_node(work_id, node_id)
 
     return LibraryContextResponse(
         node=node,
-        author=author,
+        author=author_name,
         scripture_references=scripture_refs,
         navigation=node.navigation,
     )

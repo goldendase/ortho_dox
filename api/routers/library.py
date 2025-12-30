@@ -3,20 +3,16 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from api.models.library import (
-    AuthorDetail,
-    AuthorListResponse,
-    AuthorRole,
-    AuthorWorksResponse,
+    Era,
+    FiltersResponse,
     LibraryContextResponse,
     LibraryExpandMode,
-    NodeFull,
-    NodeMinimal,
-    NodeWithComponents,
+    ReadingLevel,
     ScriptureRefsResponse,
-    WorkCategory,
     WorkDetail,
     WorkListResponse,
     WorkTOCResponse,
+    WorkType,
 )
 from api.services import library_service
 
@@ -28,17 +24,26 @@ router = APIRouter(prefix="/library", tags=["library"])
 
 @router.get("/works", response_model=WorkListResponse)
 async def list_works(
-    category: WorkCategory | None = None,
-    author: str | None = Query(None, description="Filter by author ID"),
+    work_type: WorkType | None = Query(None, description="Filter by work type"),
+    era: Era | None = Query(None, description="Filter by era"),
+    reading_level: ReadingLevel | None = Query(None, description="Filter by reading level"),
+    author: str | None = Query(None, description="Filter by author name"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ):
     """
     List all theological works in the library.
 
-    Filter by category (patristic, biography, etc.) or author.
+    Filter by work type, era, reading level, or author name.
     """
-    return await library_service.get_works(category, author, limit, offset)
+    return await library_service.get_works(
+        work_type=work_type,
+        era=era,
+        reading_level=reading_level,
+        author=author,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/works/{work_id}", response_model=WorkDetail)
@@ -136,37 +141,18 @@ async def get_node_scripture_refs(work_id: str, node_id: str):
     return refs
 
 
-# --- Authors ---
+# --- Filters ---
 
 
-@router.get("/authors", response_model=AuthorListResponse)
-async def list_authors(
-    role: AuthorRole | None = Query(None, description="Filter by role"),
-):
+@router.get("/filters", response_model=FiltersResponse)
+async def get_filters():
     """
-    List all authors in the library.
+    Get available filter values for the library index.
 
-    Returns authors aggregated from all works with work counts.
+    Returns lists of authors, work types, eras, and reading levels
+    that have at least one work in the library.
     """
-    return await library_service.get_authors(role)
-
-
-@router.get("/authors/{author_id}", response_model=AuthorDetail)
-async def get_author(author_id: str):
-    """Get details for a specific author."""
-    author = await library_service.get_author(author_id)
-    if not author:
-        raise HTTPException(status_code=404, detail=f"Author not found: {author_id}")
-    return author
-
-
-@router.get("/authors/{author_id}/works", response_model=AuthorWorksResponse)
-async def get_author_works(author_id: str):
-    """Get all works by an author."""
-    result = await library_service.get_author_works(author_id)
-    if not result:
-        raise HTTPException(status_code=404, detail=f"Author not found: {author_id}")
-    return result
+    return await library_service.get_filters()
 
 
 # --- Context (MCP) ---

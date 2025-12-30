@@ -7,7 +7,7 @@
 import { api, type ApiRequestOptions } from './client';
 import type {
 	LibraryWorksResponse,
-	LibraryWork,
+	LibraryWorkDetail,
 	TocResponse,
 	LibraryNode,
 	LibraryNodeLeaf,
@@ -17,7 +17,10 @@ import type {
 	LibraryAuthorDetail,
 	LibraryAuthorWorksResponse,
 	LibraryNodeContext,
-	LibraryCategory
+	FiltersResponse,
+	Era,
+	WorkType,
+	ReadingLevel
 } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,7 +28,9 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ListWorksParams {
-	category?: LibraryCategory;
+	work_type?: WorkType;
+	era?: Era;
+	reading_level?: ReadingLevel;
 	author?: string;
 	limit?: number;
 	offset?: number;
@@ -45,8 +50,12 @@ export async function listWorks(
 export async function getWork(
 	workId: string,
 	options?: ApiRequestOptions
-): Promise<LibraryWork> {
-	return api.get<LibraryWork>(`/library/works/${workId}`, undefined, options);
+): Promise<LibraryWorkDetail> {
+	return api.get<LibraryWorkDetail>(`/library/works/${workId}`, undefined, options);
+}
+
+export async function getFilters(options?: ApiRequestOptions): Promise<FiltersResponse> {
+	return api.get<FiltersResponse>('/library/filters', undefined, options);
 }
 
 export async function getToc(
@@ -181,6 +190,7 @@ export async function getNodeContext(
 export const library = {
 	listWorks,
 	getWork,
+	getFilters,
 	getToc,
 	getNode,
 	getLeafNode,

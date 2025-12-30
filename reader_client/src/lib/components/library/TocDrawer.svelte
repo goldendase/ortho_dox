@@ -5,29 +5,25 @@
   Similar pattern to BookPicker but for library navigation.
 -->
 <script lang="ts">
-	import type { TocNode as TocNodeType, LibraryWork } from '$lib/api';
+	import type { TocNode as TocNodeType, LibraryWorkDetail } from '$lib/api';
 	import TocNode from './TocNode.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
 	interface Props {
-		work: LibraryWork;
+		work: LibraryWorkDetail;
 		toc: TocNodeType;
 		workId: string;
 		onClose?: () => void;
 	}
 
 	let { work, toc, workId, onClose }: Props = $props();
-
-	const primaryAuthor = $derived(
-		work.authors.find((a) => a.role === 'author') || work.authors[0]
-	);
 </script>
 
 <div class="toc-drawer">
 	<header class="drawer-header">
 		<h2 class="work-title">{work.title}</h2>
-		{#if primaryAuthor}
-			<p class="work-author">{primaryAuthor.name}</p>
+		{#if work.author}
+			<p class="work-author">{work.author}</p>
 		{/if}
 	</header>
 

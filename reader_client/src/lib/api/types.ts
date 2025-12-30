@@ -409,43 +409,51 @@ export interface ChatResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Library - Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Era = 'apostolic' | 'nicene' | 'byzantine' | 'early_modern' | 'modern';
+export type WorkType = 'commentary' | 'ascetical' | 'pastoral' | 'doctrinal' | 'historical';
+export type ReadingLevel = 'inquirer' | 'catechumen' | 'faithful' | 'scholar';
+export type ContributorRole = 'translator' | 'editor' | 'compiler';
+export type Tradition =
+	| 'eastern_orthodox'
+	| 'oriental_orthodox'
+	| 'catholic'
+	| 'protestant'
+	| 'ecumenical'
+	| 'heretical';
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Library - Works
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LibraryCategory =
-	| 'patristic'
-	| 'biography'
-	| 'church_history'
-	| 'spiritual'
-	| 'liturgical'
-	| 'theological';
-
-export type AuthorRole = 'author' | 'translator' | 'editor' | 'compiler';
-
-export interface LibraryAuthor {
-	id: string;
+export interface Contributor {
 	name: string;
-	role: AuthorRole;
-	dates?: string;
-	description?: string;
+	role: ContributorRole;
 }
 
 export interface LibraryWorkSummary {
 	id: string;
 	title: string;
 	subtitle?: string;
-	authors: LibraryAuthor[];
-	category: LibraryCategory;
-	subjects: string[];
+	description?: string;
+	notes?: string;
+	author: string;
+	contributors: Contributor[];
+	work_type: WorkType;
+	era: Era;
+	reading_level: ReadingLevel;
+	tags: string[];
 	node_count: number;
 	has_images: boolean;
 }
 
-export interface LibraryWork extends LibraryWorkSummary {
-	publisher?: string;
-	publication_date?: string;
-	isbn?: string;
-	source_format: 'epub' | 'pdf' | 'html';
+export interface LibraryWorkDetail extends LibraryWorkSummary {
+	relevance?: string;
+	tradition: Tradition;
+	cover_image?: string;
+	publication_year?: number;
 	leaf_count: number;
 	scripture_ref_count: number;
 }
@@ -455,6 +463,22 @@ export interface LibraryWorksResponse {
 	total: number;
 	limit: number;
 	offset: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Library - Filters
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FilterAuthor {
+	name: string;
+	work_count: number;
+}
+
+export interface FiltersResponse {
+	authors: FilterAuthor[];
+	work_types: string[];
+	eras: string[];
+	reading_levels: string[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -640,8 +664,8 @@ export interface LibraryAuthorWorksResponse {
 	works: Array<{
 		id: string;
 		title: string;
-		role: AuthorRole;
-		category: LibraryCategory;
+		role: ContributorRole;
+		work_type: WorkType;
 	}>;
 	total: number;
 }

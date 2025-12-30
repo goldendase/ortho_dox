@@ -8,7 +8,7 @@
  */
 
 import { browser } from '$app/environment';
-import type { LibraryWork, TocNode, LibraryNodeLeaf } from '$lib/api';
+import type { LibraryWorkDetail, TocNode, LibraryNodeLeaf } from '$lib/api';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -81,7 +81,7 @@ function saveSelectedParagraph(para: SelectedParagraph | null): void {
 
 class LibraryStore {
 	#position = $state<LibraryPosition | null>(loadPosition());
-	#currentWork = $state<LibraryWork | null>(null);
+	#currentWork = $state<LibraryWorkDetail | null>(null);
 	#toc = $state<TocNode | null>(null);
 	#currentNode = $state<LibraryNodeLeaf | null>(null);
 	#selectedParagraph = $state<SelectedParagraph | null>(loadSelectedParagraph());
@@ -145,7 +145,7 @@ class LibraryStore {
 	/**
 	 * Set current work data (from page load)
 	 */
-	setWork(work: LibraryWork): void {
+	setWork(work: LibraryWorkDetail): void {
 		this.#currentWork = work;
 	}
 

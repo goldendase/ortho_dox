@@ -18,6 +18,7 @@ export {
 	library,
 	listWorks,
 	getWork,
+	getFilters,
 	getToc,
 	getNode,
 	getLeafNode,
