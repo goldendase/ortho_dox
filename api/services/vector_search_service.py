@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from api.config import settings
+from api.db import MongoDB
 
 logger = logging.getLogger(__name__)
 
@@ -185,21 +186,44 @@ async def search_library(
             include_metadata=True,
         )
 
-        search_results = []
+        # Filter by score threshold first
         min_score = settings.vector_search_min_score
+        valid_matches = [m for m in results.matches if m.score >= min_score]
 
-        for match in results.matches:
-            # Filter by score threshold
-            if match.score < min_score:
-                continue
+        if not valid_matches:
+            return []
 
+        # Collect all vector IDs to look up logical node IDs from MongoDB
+        vector_ids = [m.id for m in valid_matches]
+
+        # Query MongoDB nodes collection to resolve vector_id -> logical id
+        # Each node has pinecone_vector_id array containing its chunk vector IDs
+        db = MongoDB.db_dox
+        node_docs = await db.library_nodes.find(
+            {"pinecone_vector_id": {"$in": vector_ids}},
+            {"id": 1, "pinecone_vector_id": 1}
+        ).to_list(length=None)
+
+        # Build mapping: vector_id -> logical node id
+        vector_to_node_id: dict[str, str] = {}
+        for doc in node_docs:
+            logical_id = doc.get("id", "")
+            for vid in doc.get("pinecone_vector_id", []):
+                vector_to_node_id[vid] = logical_id
+
+        # Build results with resolved node IDs
+        search_results = []
+        for match in valid_matches:
             meta = match.metadata or {}
+
+            # Look up logical node_id, fall back to metadata node_id if not found
+            resolved_node_id = vector_to_node_id.get(match.id, meta.get("node_id", ""))
 
             result = LibrarySearchResult(
                 score=match.score,
                 text=meta.get("text", ""),
                 work_id=meta.get("work_id", ""),
-                node_id=meta.get("node_id", ""),
+                node_id=resolved_node_id,
                 node_title=meta.get("node_title"),
                 author_id=meta.get("author_id"),
                 chunk_sequence=meta.get("chunk_sequence"),

@@ -10,10 +10,17 @@
 	interface Props {
 		open: boolean;
 		position?: 'bottom' | 'left';
+		onclose?: () => void;
 		children: import('svelte').Snippet;
 	}
 
-	let { open = $bindable(), position = 'bottom', children }: Props = $props();
+	let { open = $bindable(), position = 'bottom', onclose, children }: Props = $props();
+
+	// Helper to close the sheet
+	function closeSheet() {
+		open = false;
+		onclose?.();
+	}
 
 	let sheetEl = $state<HTMLElement | undefined>(undefined);
 	let startPos = 0;
@@ -57,7 +64,7 @@
 		// If dragged more than 100px in dismiss direction, close
 		const shouldClose = position === 'left' ? delta < -100 : delta > 100;
 		if (shouldClose) {
-			open = false;
+			closeSheet();
 		}
 
 		// Reset transform
@@ -65,12 +72,12 @@
 	}
 
 	function handleOverlayClick() {
-		open = false;
+		closeSheet();
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
-			open = false;
+			closeSheet();
 		}
 	}
 

@@ -14,7 +14,7 @@ from starlette.responses import Response
 
 from api.config import settings
 from api.db import MongoDB
-from api.routers import annotations, books, chat, context, library, passages, patristic
+from api.routers import annotations, books, chat, context, library, passages, patristic, semantic_search
 
 # Logging setup
 LOG_DIR = Path(__file__).parent.parent / "log"
@@ -89,6 +89,10 @@ TAGS_METADATA = [
     {
         "name": "library",
         "description": "Theological library of patristic texts, biographies, and spiritual writings.",
+    },
+    {
+        "name": "semantic-search",
+        "description": "Semantic search across OSB and Library content using vector similarity.",
     },
 ]
 
@@ -184,6 +188,7 @@ app.include_router(patristic.router)
 app.include_router(context.router)
 app.include_router(chat.router)
 app.include_router(library.router)
+app.include_router(semantic_search.router)
 
 
 @app.get("/health", tags=["health"])

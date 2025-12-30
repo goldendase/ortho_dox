@@ -277,21 +277,84 @@ export interface ChatMessage {
 }
 
 /**
+ * A single context item - can be scripture, library content, or annotations
+ */
+export type ChatContextItem =
+	// Scripture verse
+	| {
+			type: 'verse';
+			passage_id: string;
+			book_id: string;
+			book_name: string;
+			chapter: number;
+			verse: number;
+			text: string;
+	  }
+	// Scripture verse range
+	| {
+			type: 'verse-range';
+			book_id: string;
+			book_name: string;
+			chapter: number;
+			verse_start: number;
+			verse_end: number;
+			passage_ids: string[];
+			text: string;
+	  }
+	// Library paragraph
+	| {
+			type: 'paragraph';
+			work_id: string;
+			work_title: string;
+			node_id: string;
+			node_title: string;
+			paragraph_index: number;
+			text: string;
+	  }
+	// OSB annotation (study note, liturgical, variant)
+	| {
+			type: 'osb-note';
+			note_type: 'study' | 'liturgical' | 'variant';
+			note_id: string;
+			verse_display: string;
+			text: string;
+	  }
+	// OSB article
+	| {
+			type: 'osb-article';
+			article_id: string;
+			text: string;
+	  }
+	// Library footnote/endnote
+	| {
+			type: 'library-footnote';
+			footnote_id: string;
+			footnote_type: 'footnote' | 'endnote';
+			marker: string;
+			text: string;
+	  };
+
+/**
  * Reading context sent with chat requests.
+ *
+ * Supports two patterns:
+ * 1. Multi-item context: context_items array with specific selections
+ * 2. Fallback context: just current reading position (book/chapter or work/node)
  *
  * Send explicit titles/names along with IDs so the agent doesn't waste
  * tool calls looking up things the frontend already knows.
- *
- * Common patterns:
- * - OSB verse: { passage_id, book_id, book_name, chapter, verse, verse_text }
- * - OSB chapter: { book_id, book_name, chapter, chapter_text }
- * - Library node: { work_id, work_title, node_id, node_title, node_content }
- * - Library paragraph: { work_id, work_title, node_id, node_title, paragraph_text }
- * - General: null or {}
  */
 export interface ChatContext {
 	// ─────────────────────────────────────────────────────────────────────────
-	// OSB (Orthodox Study Bible / Scripture) Context
+	// Multi-item Context (explicit selections from reading)
+	// ─────────────────────────────────────────────────────────────────────────
+
+	/** Array of selected context items (verses, paragraphs) */
+	context_items?: ChatContextItem[];
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Fallback: OSB (Orthodox Study Bible / Scripture) Context
+	// Used when no specific items are selected, just reading position
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/** OSB: Specific verse ID (format: "Gen_vchap1-1") */
@@ -310,7 +373,8 @@ export interface ChatContext {
 	chapter_text?: string;
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Library (Theological Works) Context
+	// Fallback: Library (Theological Works) Context
+	// Used when no specific items are selected, just reading position
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/** Library: Work ID (slug) */

@@ -5,13 +5,12 @@
  * - Chat messages (UI format with metadata)
  * - Conversation history (API format for requests)
  * - Streaming state
- * - Context from reader position or selected verse
+ * - Context from studyContext.focusStack (multi-item)
  * - Persistence to localStorage
  */
 
 import { browser } from '$app/environment';
-import { reader, type ReaderPosition } from './reader.svelte';
-import { libraryStore } from './library.svelte';
+import { studyContext, type FocusItem } from './studyContext.svelte';
 import { sendChatMessage } from '$lib/api';
 import type { ChatContext as ApiChatContext, ChatMessage as ApiChatMessage } from '$lib/api';
 
@@ -24,8 +23,6 @@ export interface ChatMessage {
 	id: string;
 	role: 'user' | 'assistant';
 	content: string;
-	/** The passage context when this message was sent (for display) */
-	context?: ReaderPosition;
 	timestamp: Date;
 }
 
@@ -111,71 +108,84 @@ class ChatStore {
 	error = $state<string | null>(null);
 
 	/**
-	 * Build the API context based on reading position.
+	 * Build the API context from studyContext.focusStack.
 	 *
-	 * Sends explicit titles/names along with IDs so the agent doesn't waste
-	 * tool calls looking up things we already know.
-	 *
-	 * Priority:
-	 * 1. OSB selected verse (highest priority - user explicitly selected)
-	 * 2. Library selected paragraph (user explicitly selected)
-	 * 3. Library node position (user is reading library)
-	 * 4. OSB chapter position (user is reading OSB)
+	 * Only items explicitly added to the context manager are sent.
+	 * If context manager is empty, returns null for context-free chat.
 	 */
 	get currentContext(): ApiChatContext | null {
-		// OSB: If a specific verse is selected, send full verse context
-		const selectedVerse = reader.selectedVerse;
-		if (selectedVerse) {
+		const focusStack = studyContext.focusStack;
+
+		// Only send context if user has explicitly selected items
+		if (focusStack.length > 0) {
 			return {
-				passage_id: selectedVerse.passageId,
-				book_id: selectedVerse.book,
-				book_name: selectedVerse.bookName,
-				chapter: selectedVerse.chapter,
-				verse: selectedVerse.verse,
-				verse_text: selectedVerse.text
+				context_items: focusStack.map((item) => this.#focusItemToContextItem(item))
 			};
 		}
 
-		// Library: If a paragraph is selected, include paragraph text
-		const selectedParagraph = libraryStore.selectedParagraph;
-		if (selectedParagraph) {
-			const work = libraryStore.currentWork;
-			return {
-				work_id: selectedParagraph.workId,
-				work_title: work?.title,
-				node_id: selectedParagraph.nodeId,
-				node_title: selectedParagraph.nodeTitle,
-				paragraph_text: selectedParagraph.text
-			};
-		}
-
-		// Library: If reading a library node (no paragraph selected)
-		const libPos = libraryStore.position;
-		if (libPos) {
-			const work = libraryStore.currentWork;
-			const node = libraryStore.currentNode;
-			return {
-				work_id: libPos.work,
-				work_title: libPos.workTitle ?? work?.title,
-				node_id: libPos.node,
-				node_title: libPos.nodeTitle ?? node?.title,
-				node_content: node?.content ?? undefined
-			};
-		}
-
-		// OSB: If reading a chapter (no verse selected)
-		const osbPos = reader.position;
-		if (osbPos) {
-			return {
-				book_id: osbPos.book,
-				book_name: osbPos.bookName,
-				chapter: osbPos.chapter
-				// Note: chapter_text would require fetching - backend can handle this
-			};
-		}
-
-		// No context
+		// Empty context manager = context-free chat
 		return null;
+	}
+
+	/**
+	 * Convert a FocusItem to a ContextItem for the API
+	 */
+	#focusItemToContextItem(item: FocusItem): ApiChatContext['context_items'] extends (infer T)[] | undefined ? T : never {
+		switch (item.type) {
+			case 'verse':
+				return {
+					type: 'verse',
+					passage_id: item.passageId,
+					book_id: item.book,
+					book_name: item.bookName,
+					chapter: item.chapter,
+					verse: item.verse,
+					text: item.text
+				};
+			case 'verse-range':
+				return {
+					type: 'verse-range',
+					book_id: item.book,
+					book_name: item.bookName,
+					chapter: item.chapter,
+					verse_start: item.startVerse,
+					verse_end: item.endVerse,
+					passage_ids: item.passageIds,
+					text: item.text
+				};
+			case 'paragraph':
+				return {
+					type: 'paragraph',
+					work_id: item.workId,
+					work_title: item.workTitle,
+					node_id: item.nodeId,
+					node_title: item.nodeTitle,
+					paragraph_index: item.index,
+					text: item.text
+				};
+			case 'osb-note':
+				return {
+					type: 'osb-note',
+					note_type: item.noteType,
+					note_id: item.noteId,
+					verse_display: item.verseDisplay,
+					text: item.text
+				};
+			case 'osb-article':
+				return {
+					type: 'osb-article',
+					article_id: item.articleId,
+					text: item.text
+				};
+			case 'library-footnote':
+				return {
+					type: 'library-footnote',
+					footnote_id: item.footnoteId,
+					footnote_type: item.footnoteType,
+					marker: item.marker,
+					text: item.text
+				};
+		}
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -195,7 +205,6 @@ class ChatStore {
 			id: crypto.randomUUID(),
 			role: 'user',
 			content,
-			context: reader.position ?? undefined,
 			timestamp: new Date()
 		};
 		this.messages = [...this.messages, message];

@@ -27,6 +27,9 @@ const DEFAULT_PREFERENCES: Preferences = {
 	scriptureRefBehavior: 'preview'
 };
 
+// Text sizes array for iteration
+export const TEXT_SIZES: TextSize[] = ['sm', 'md', 'lg', 'xl'];
+
 // Text size to CSS font-size mapping
 export const TEXT_SIZE_VALUES: Record<TextSize, string> = {
 	sm: '0.9rem',

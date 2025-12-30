@@ -7,12 +7,17 @@
   - [quote[id]] → styled blockquotes
   - [epigraph[id]] → chapter epigraphs
   - [SCRIPTURE[book:chapter:verse]] → clickable scripture links (e.g., "Luke 11:23")
+
+  Paragraphs are clickable to toggle in reading context (focusStack).
 -->
 <script lang="ts">
 	import type { LibraryNodeLeaf, LibraryComponents, PassageWithAnnotations } from '$lib/api';
 	import { books } from '$lib/api';
 	import FootnoteMarker from './FootnoteMarker.svelte';
-	import { ui, libraryStore, reader } from '$lib/stores';
+	import { ui, libraryStore } from '$lib/stores';
+	import { studyContext, type FocusItem } from '$lib/stores/studyContext.svelte';
+	import { layout } from '$lib/stores/layout.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
 	import { parseScriptureRef, formatScriptureDisplay, type ScriptureRef } from '$lib/utils/chatAnnotations';
 
 	interface Props {
@@ -172,55 +177,81 @@
 	// Track loading state for scripture refs
 	let loadingScriptureRef = $state<string | null>(null);
 
-	// Track currently selected paragraph element (for class manipulation)
-	let currentSelectedEl: HTMLElement | null = null;
+	// Check if a paragraph is in the reading context
+	function isParagraphInContext(paragraphIndex: number): boolean {
+		return studyContext.focusStack.some(
+			(item) =>
+				item.type === 'paragraph' &&
+				item.workId === node.work_id &&
+				item.nodeId === node.id &&
+				item.index === paragraphIndex
+		);
+	}
 
-	// Handle paragraph selection - ALL logic is here, no reactive effects
+	// Handle paragraph click - toggle in/out of focusStack
 	function handleParagraphClick(paragraphEl: HTMLElement) {
 		const id = paragraphEl.id;
 		const match = id.match(/^od-lib-p(\d+)$/);
 		if (!match) return;
 
 		const paragraphIndex = parseInt(match[1], 10);
+		const text = paragraphEl.textContent?.slice(0, 150) ?? '';
+		const nodeTitle = node.title || libraryStore.position?.nodeTitle || node.id;
+		const workTitle = libraryStore.currentWork?.title || node.work_id;
 
-		// Check if clicking the same paragraph (toggle off)
-		const selected = libraryStore.selectedParagraph;
-		const isAlreadySelected =
-			selected !== null &&
-			selected.workId === node.work_id &&
-			selected.nodeId === node.id &&
-			selected.index === paragraphIndex;
+		// Build focus item for this paragraph
+		const focusItem: FocusItem = {
+			type: 'paragraph',
+			workId: node.work_id,
+			workTitle,
+			nodeId: node.id,
+			nodeTitle,
+			index: paragraphIndex,
+			text
+		};
 
-		// Remove .selected from previous element
-		if (currentSelectedEl) {
-			currentSelectedEl.classList.remove('selected');
-			currentSelectedEl = null;
-		}
+		// Check if this paragraph is already in context
+		const isInContext = isParagraphInContext(paragraphIndex);
 
-		if (isAlreadySelected) {
-			// Deselect
-			libraryStore.clearSelectedParagraph();
+		if (isInContext) {
+			// Remove from context
+			studyContext.removeFocus(focusItem);
+			paragraphEl.classList.remove('selected');
 		} else {
-			// Select new paragraph
-			paragraphEl.classList.add('selected');
-			currentSelectedEl = paragraphEl;
-
-			// Clear OSB verse selection (mutually exclusive)
-			reader.clearSelectedVerse();
-
-			const text = paragraphEl.textContent?.slice(0, 150) ?? '';
-			const nodeTitle = node.title || libraryStore.position?.nodeTitle || node.id;
-			libraryStore.selectParagraph({
-				workId: node.work_id,
-				nodeId: node.id,
-				nodeTitle,
-				index: paragraphIndex,
-				text
-			});
-
-			ui.openChat();
+			// Add to context
+			const success = studyContext.pushFocus(focusItem);
+			if (success) {
+				paragraphEl.classList.add('selected');
+			} else {
+				toast.warning('Context limit reached (15 items). Remove some items first.');
+			}
 		}
 	}
+
+	// Update paragraph visual state based on focusStack changes
+	// This is needed because the HTML is generated, not reactive
+	$effect(() => {
+		const stack = studyContext.focusStack;
+		// Get all paragraph elements
+		const paragraphs = document.querySelectorAll('[id^="od-lib-p"]');
+		paragraphs.forEach((el) => {
+			const match = el.id.match(/^od-lib-p(\d+)$/);
+			if (!match) return;
+			const idx = parseInt(match[1], 10);
+			const inContext = stack.some(
+				(item) =>
+					item.type === 'paragraph' &&
+					item.workId === node.work_id &&
+					item.nodeId === node.id &&
+					item.index === idx
+			);
+			if (inContext) {
+				el.classList.add('selected');
+			} else {
+				el.classList.remove('selected');
+			}
+		});
+	});
 
 	// Handle footnote and scripture ref clicks via event delegation
 	async function handleContentClick(e: MouseEvent) {

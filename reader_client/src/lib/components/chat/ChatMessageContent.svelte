@@ -161,6 +161,7 @@
 	   Markdown Content Container
 	   ───────────────────────────────────────────────────── */
 	.markdown-content {
+		font-size: var(--text-size, 1rem);
 		line-height: var(--leading-relaxed);
 		color: var(--color-text-primary);
 	}

@@ -11,7 +11,16 @@ directly and only fetch what's missing. IDs are always explicit so the agent
 never has to call list_library_works() or similar just to find an ID.
 """
 
-from api.models.chat import ReadingContext
+from api.models.chat import (
+    ReadingContext,
+    ContextItem,
+    VerseContextItem,
+    VerseRangeContextItem,
+    ParagraphContextItem,
+    OsbNoteContextItem,
+    OsbArticleContextItem,
+    LibraryFootnoteContextItem,
+)
 from api.models.common import ExpandMode
 from api.models.library import LibraryExpandMode
 from api.services import book_service, context_service, library_service, passage_service
@@ -28,7 +37,15 @@ async def build_context(ctx: ReadingContext | None) -> str:
 
     sections = []
 
-    # OSB Context (Scripture)
+    # Priority 1: Multi-item context (explicit selections from frontend)
+    if ctx.context_items and len(ctx.context_items) > 0:
+        items_ctx = _build_context_items(ctx.context_items)
+        if items_ctx:
+            sections.append(items_ctx)
+        # When context_items are present, we use ONLY those - skip legacy fallbacks
+        return "\n\n".join(sections) if sections else "No specific reading context provided."
+
+    # Legacy fallback: OSB Context (Scripture)
     if ctx.passage_id:
         osb_ctx = await _build_passage_context(ctx)
         if osb_ctx:
@@ -38,7 +55,7 @@ async def build_context(ctx: ReadingContext | None) -> str:
         if osb_ctx:
             sections.append(osb_ctx)
 
-    # Library Context (Theological Works)
+    # Legacy fallback: Library Context (Theological Works)
     if ctx.work_id:
         lib_ctx = await _build_library_context(ctx)
         if lib_ctx:
@@ -48,6 +65,101 @@ async def build_context(ctx: ReadingContext | None) -> str:
         return "No specific reading context provided. The user is asking a general question."
 
     return "\n\n".join(sections)
+
+
+def _build_context_items(items: list[ContextItem]) -> str:
+    """Build context from explicit multi-item selections.
+
+    This is the preferred path - the frontend sends exactly what the user selected
+    with full text content, so we just format it for the LLM.
+    """
+    lines = [
+        "## User's Selected Reading Context",
+        "",
+        f"The user has selected {len(items)} item(s) to discuss:",
+        "",
+    ]
+
+    for i, item in enumerate(items, 1):
+        lines.append(f"### Item {i}: {_format_item_header(item)}")
+        lines.append("")
+        lines.extend(_format_item_content(item))
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _format_item_header(item: ContextItem) -> str:
+    """Format a short header for a context item."""
+    if isinstance(item, VerseContextItem):
+        return f"{item.book_name} {item.chapter}:{item.verse}"
+    elif isinstance(item, VerseRangeContextItem):
+        return f"{item.book_name} {item.chapter}:{item.verse_start}-{item.verse_end}"
+    elif isinstance(item, ParagraphContextItem):
+        return f"{item.work_title} - {item.node_title} (¶{item.paragraph_index})"
+    elif isinstance(item, OsbNoteContextItem):
+        type_label = {
+            "study": "Study Note",
+            "liturgical": "Liturgical Note",
+            "variant": "Textual Variant",
+        }.get(item.note_type, "Note")
+        return f"{type_label} on {item.verse_display}"
+    elif isinstance(item, OsbArticleContextItem):
+        return "OSB Article"
+    elif isinstance(item, LibraryFootnoteContextItem):
+        type_label = "Endnote" if item.footnote_type == "endnote" else "Footnote"
+        return f"{type_label} [{item.marker}]"
+    else:
+        return "Unknown Item"
+
+
+def _format_item_content(item: ContextItem) -> list[str]:
+    """Format the content details for a context item."""
+    lines = []
+
+    if isinstance(item, VerseContextItem):
+        lines.append("**Type:** Scripture Verse")
+        lines.append(f"**Reference:** {item.book_name} {item.chapter}:{item.verse}")
+        lines.append(f"**IDs:** passage_id=`{item.passage_id}`, book_id=`{item.book_id}`")
+        lines.append(f"**Text:** \"{item.text}\"")
+
+    elif isinstance(item, VerseRangeContextItem):
+        lines.append("**Type:** Scripture Verse Range")
+        lines.append(f"**Reference:** {item.book_name} {item.chapter}:{item.verse_start}-{item.verse_end}")
+        lines.append(f"**IDs:** book_id=`{item.book_id}`, passage_ids={item.passage_ids}")
+        lines.append(f"**Text:** \"{item.text}\"")
+
+    elif isinstance(item, ParagraphContextItem):
+        lines.append("**Type:** Library Paragraph")
+        lines.append(f"**Work:** {item.work_title}")
+        lines.append(f"**Section:** {item.node_title}")
+        lines.append(f"**IDs:** work_id=`{item.work_id}`, node_id=`{item.node_id}`, paragraph={item.paragraph_index}")
+        lines.append(f"**Text:** \"{item.text}\"")
+
+    elif isinstance(item, OsbNoteContextItem):
+        type_label = {
+            "study": "Study Note",
+            "liturgical": "Liturgical Note",
+            "variant": "Textual Variant",
+        }.get(item.note_type, "Note")
+        lines.append(f"**Type:** {type_label}")
+        lines.append(f"**Verse:** {item.verse_display}")
+        lines.append(f"**ID:** note_id=`{item.note_id}`")
+        lines.append(f"**Content:** \"{item.text}\"")
+
+    elif isinstance(item, OsbArticleContextItem):
+        lines.append("**Type:** OSB Article")
+        lines.append(f"**ID:** article_id=`{item.article_id}`")
+        lines.append(f"**Content:** \"{item.text}\"")
+
+    elif isinstance(item, LibraryFootnoteContextItem):
+        type_label = "Endnote" if item.footnote_type == "endnote" else "Footnote"
+        lines.append(f"**Type:** {type_label}")
+        lines.append(f"**Marker:** [{item.marker}]")
+        lines.append(f"**ID:** footnote_id=`{item.footnote_id}`")
+        lines.append(f"**Content:** \"{item.text}\"")
+
+    return lines
 
 
 async def _build_passage_context(ctx: ReadingContext) -> str | None:

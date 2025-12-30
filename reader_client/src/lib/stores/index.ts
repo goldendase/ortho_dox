@@ -5,16 +5,54 @@
  *   import { reader, ui, chat, favorites, auth } from '$lib/stores';
  */
 
-export { reader, formatPosition, positionToPath, type ReaderPosition, type SelectedVerse } from './reader.svelte';
-export { ui, type SidePanelContent, type SidePanelTab } from './ui.svelte';
+// ─────────────────────────────────────────────────────────────────────────────
+// New Architecture Stores
+// ─────────────────────────────────────────────────────────────────────────────
+
+export {
+	studyContext,
+	formatPosition,
+	positionToPath,
+	formatFocusItem,
+	type ReadingMode,
+	type ScripturePosition,
+	type LibraryPosition,
+	type Position,
+	type FocusItem
+} from './studyContext.svelte';
+
+export {
+	layout,
+	type AppMode,
+	type SheetState,
+	type StudyPanelContent
+} from './layout.svelte';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy Stores (kept for compatibility during migration)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export {
+	reader,
+	formatPosition as formatReaderPosition,
+	positionToPath as readerPositionToPath,
+	type ReaderPosition,
+	type SelectedVerse
+} from './reader.svelte';
+
+export { ui, type SidePanelContent as LegacySidePanelContent, type SidePanelTab } from './ui.svelte';
+
 export { chat, type ChatMessage, type ChatContext } from './chat.svelte';
+
 export {
 	favorites,
 	makePassageId,
 	type FavoritePassage,
 	type FavoriteNote
 } from './favorites.svelte';
+
 export { auth } from './auth.svelte';
+
 export {
 	libraryStore,
 	formatLibraryPosition,
@@ -22,9 +60,10 @@ export {
 	getTocNodeTitle,
 	findFirstLeafNode,
 	flattenTocLeaves,
-	type LibraryPosition,
+	type LibraryPosition as LegacyLibraryPosition,
 	type SelectedParagraph
 } from './library.svelte';
+
 export {
 	preferences,
 	TEXT_SIZE_VALUES,

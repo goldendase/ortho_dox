@@ -1,7 +1,7 @@
 """Chat request and response models."""
 
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -29,15 +29,109 @@ class ToolCall(BaseModel):
     result: Any | None = None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Context Items (multi-item context support)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VerseContextItem(BaseModel):
+    """A single verse selection."""
+
+    type: Literal["verse"]
+    passage_id: str
+    book_id: str
+    book_name: str
+    chapter: int
+    verse: int
+    text: str
+
+
+class VerseRangeContextItem(BaseModel):
+    """A verse range selection."""
+
+    type: Literal["verse-range"]
+    book_id: str
+    book_name: str
+    chapter: int
+    verse_start: int
+    verse_end: int
+    passage_ids: list[str]
+    text: str
+
+
+class ParagraphContextItem(BaseModel):
+    """A library paragraph selection."""
+
+    type: Literal["paragraph"]
+    work_id: str
+    work_title: str
+    node_id: str
+    node_title: str
+    paragraph_index: int
+    text: str
+
+
+class OsbNoteContextItem(BaseModel):
+    """An OSB annotation (study/liturgical/variant note)."""
+
+    type: Literal["osb-note"]
+    note_type: Literal["study", "liturgical", "variant"]
+    note_id: str
+    verse_display: str
+    text: str
+
+
+class OsbArticleContextItem(BaseModel):
+    """An OSB article."""
+
+    type: Literal["osb-article"]
+    article_id: str
+    text: str
+
+
+class LibraryFootnoteContextItem(BaseModel):
+    """A library footnote/endnote."""
+
+    type: Literal["library-footnote"]
+    footnote_id: str
+    footnote_type: Literal["footnote", "endnote"]
+    marker: str
+    text: str
+
+
+ContextItem = (
+    VerseContextItem
+    | VerseRangeContextItem
+    | ParagraphContextItem
+    | OsbNoteContextItem
+    | OsbArticleContextItem
+    | LibraryFootnoteContextItem
+)
+
+
 class ReadingContext(BaseModel):
     """Current reading context - OSB (Scripture) or Library (theological works).
+
+    Supports two patterns:
+    1. Multi-item context: context_items array with specific selections (verses, paragraphs, notes)
+    2. Fallback context: just current reading position (book/chapter or work/node)
 
     The frontend should send explicit titles/names along with IDs so the agent
     doesn't waste tool calls looking up things the frontend already knows.
     """
 
     # ─────────────────────────────────────────────────────────────────────────
-    # OSB (Orthodox Study Bible / Scripture) Context
+    # Multi-item Context (explicit selections from reading)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    context_items: list[ContextItem] | None = Field(
+        default=None,
+        description="Array of selected context items (verses, paragraphs, notes, etc.).",
+    )
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Fallback: OSB (Orthodox Study Bible / Scripture) Context
+    # Used when no specific items are selected, just reading position
     # ─────────────────────────────────────────────────────────────────────────
 
     # OSB IDs

@@ -2,7 +2,7 @@
   Verse Component
 
   Renders a single verse with:
-  - Entire verse clickable to select for chat context
+  - Entire verse clickable to toggle in reading context (focusStack)
   - Text with HTML markup (<i>, <b>)
   - Annotation markers (clickable independently via stopPropagation)
   - Poetry line breaks preserved
@@ -10,7 +10,10 @@
 -->
 <script lang="ts">
 	import type { PassageWithAnnotations, StudyNote, LiturgicalNote, VariantNote } from '$lib/api';
-	import { ui, favorites, reader, libraryStore } from '$lib/stores';
+	import { ui, favorites, reader } from '$lib/stores';
+	import { studyContext, type FocusItem } from '$lib/stores/studyContext.svelte';
+	import { layout } from '$lib/stores/layout.svelte';
+	import { toast } from '$lib/stores/toast.svelte';
 	import AnnotationMarker from './AnnotationMarker.svelte';
 	import FavoriteButton from '$lib/components/ui/FavoriteButton.svelte';
 
@@ -38,9 +41,11 @@
 		favorites.isPassageFavorited(passage.book_id, passage.chapter, passage.verse)
 	);
 
-	// Check if this verse is selected for chat context
-	const isSelected = $derived(
-		reader.selectedVerse?.passageId === passage.id
+	// Check if this verse is in the reading context (focusStack)
+	const isInContext = $derived(
+		studyContext.focusStack.some(
+			(item) => item.type === 'verse' && item.passageId === passage.id
+		)
 	);
 
 	// Check if a specific note is active (for marker highlighting)
@@ -64,26 +69,28 @@
 		});
 	}
 
-	function handleSelectVerse() {
+	function handleToggleContext() {
 		const bookName = reader.position?.bookName ?? passage.book_id;
 
-		// Toggle selection - clicking same verse clears it
-		if (isSelected) {
-			reader.clearSelectedVerse();
-		} else {
-			// Clear library paragraph selection (mutually exclusive)
-			libraryStore.clearSelectedParagraph();
+		// Build focus item for this verse
+		const focusItem: FocusItem = {
+			type: 'verse',
+			book: passage.book_id,
+			bookName,
+			chapter: passage.chapter,
+			verse: passage.verse,
+			passageId: passage.id,
+			text: passage.text.replace(/<[^>]*>/g, '').slice(0, 150)
+		};
 
-			reader.selectVerse({
-				book: passage.book_id,
-				bookName,
-				chapter: passage.chapter,
-				verse: passage.verse,
-				passageId: passage.id,
-				text: passage.text.replace(/<[^>]*>/g, '').slice(0, 150)
-			});
-			// Open chat panel when selecting a verse
-			ui.openChat();
+		// Toggle: remove if already in context, add if not
+		if (isInContext) {
+			studyContext.removeFocus(focusItem);
+		} else {
+			const success = studyContext.pushFocus(focusItem);
+			if (!success) {
+				toast.warning('Context limit reached (15 items). Remove some items first.');
+			}
 		}
 	}
 </script>
@@ -93,17 +100,17 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
 <p
 	class="verse scripture-text"
-	class:selected={isSelected}
+	class:selected={isInContext}
 	id="osb-{passage.book_id}-{passage.chapter}-{passage.verse}"
-	onclick={handleSelectVerse}
+	onclick={handleToggleContext}
 	onmouseenter={() => (isHovered = true)}
 	onmouseleave={() => (isHovered = false)}
 	role="button"
 	tabindex="0"
-	aria-pressed={isSelected}
-	title={isSelected ? 'Click to deselect verse' : 'Click to select verse for discussion'}
+	aria-pressed={isInContext}
+	title={isInContext ? 'Click to remove from reading context' : 'Click to add to reading context'}
 >
-	<span class="verse-num" class:selected={isSelected}>{passage.verse}</span>
+	<span class="verse-num" class:selected={isInContext}>{passage.verse}</span>
 	<span class="verse-text">
 		{@html passage.text}
 	</span>

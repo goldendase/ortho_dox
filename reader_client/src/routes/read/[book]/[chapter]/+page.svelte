@@ -1,28 +1,59 @@
 <!--
   Reader Page
 
-  Displays a chapter with verses and annotations.
+  Displays a scripture chapter with verses and annotations.
+  Uses StudyContext for position tracking (single source of truth).
 -->
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { reader } from '$lib/stores';
+	import { reader } from '$lib/stores/reader.svelte';
+	import { studyContext } from '$lib/stores/studyContext.svelte';
 	import Chapter from '$lib/components/reader/Chapter.svelte';
 	import ChapterNav from '$lib/components/navigation/ChapterNav.svelte';
 
 	let { data } = $props();
 
-	// Update reader position when page data changes
-	// Use untrack to prevent the effect from depending on reader.position
-	// (navigate() reads position internally to check isSameLocation)
+	// Helper to convert API navigation URL to app route
+	function navUrlToPath(url: string | null): string | undefined {
+		if (!url) return undefined;
+		// Convert "/books/genesis/chapters/2/passages" to "/read/genesis/2"
+		const match = url.match(/\/books\/([^/]+)\/chapters\/(\d+)/);
+		if (match) {
+			return `/read/${match[1]}/${match[2]}`;
+		}
+		return undefined;
+	}
+
+	// Update position when page data changes
 	$effect(() => {
 		const pos = {
+			type: 'scripture' as const,
 			book: data.chapter.book_id,
 			bookName: data.chapter.book_name,
 			chapter: data.chapter.chapter
 		};
-		untrack(() => reader.navigate(pos));
+
+		// Update StudyContext (single source of truth)
+		untrack(() => studyContext.navigate(pos));
+
+		// Set navigation links
+		untrack(() =>
+			studyContext.setNavigation({
+				prev: navUrlToPath(data.chapter.navigation.prev_chapter),
+				next: navUrlToPath(data.chapter.navigation.next_chapter)
+			})
+		);
+
+		// Also update legacy reader store for existing components
+		untrack(() =>
+			reader.navigate({
+				book: data.chapter.book_id,
+				bookName: data.chapter.book_name,
+				chapter: data.chapter.chapter
+			})
+		);
 
 		// Scroll to top when chapter changes (unless there's a hash to scroll to)
 		if (!window.location.hash) {
@@ -55,17 +86,31 @@
 
 		if (verseNum) {
 			// Use the new ID format for lookup
-			const verseEl = document.getElementById(`osb-${data.chapter.book_id}-${data.chapter.chapter}-${verseNum}`);
+			const verseEl = document.getElementById(
+				`osb-${data.chapter.book_id}-${data.chapter.chapter}-${verseNum}`
+			);
 			if (verseEl) {
 				verseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 				reader.scrollToVerse(parseInt(verseNum, 10));
 
-				// If 'select' param present, also select the verse for chat context
+				// If 'select' param present, also select the verse for chat/focus context
 				if (selectParam) {
 					const verse = parseInt(selectParam, 10);
 					const passage = data.chapter.passages.find((p) => p.verse === verse);
 					if (passage) {
+						// Update legacy reader store
 						reader.selectVerse({
+							book: passage.book_id,
+							bookName: data.chapter.book_name,
+							chapter: passage.chapter,
+							verse: passage.verse,
+							passageId: passage.id,
+							text: passage.text.replace(/<[^>]*>/g, '').slice(0, 150)
+						});
+
+						// Also push to StudyContext focus stack
+						studyContext.pushFocus({
+							type: 'verse',
 							book: passage.book_id,
 							bookName: data.chapter.book_name,
 							chapter: passage.chapter,

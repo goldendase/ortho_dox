@@ -1,44 +1,28 @@
 <!--
   Library Reader Page
 
-  Full-height paginated reader for library content with:
-  - Custom header (replaces main header)
-  - TOC drawer
-  - Paginated content
-  - Page navigation
+  Displays library content (patristic writings, etc.)
+  within the unified AppShell layout.
+
+  Navigation is handled by:
+  - NavigationDrawer (left drawer with TOC)
+  - AppShell (layout management)
 -->
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
 	import { page } from '$app/stores';
-	import { libraryStore, ui } from '$lib/stores';
-	import Sheet from '$lib/components/ui/Sheet.svelte';
-	import LibraryHeader from '$lib/components/library/LibraryHeader.svelte';
-	import TocDrawer from '$lib/components/library/TocDrawer.svelte';
+	import { libraryStore } from '$lib/stores/library.svelte';
+	import { studyContext } from '$lib/stores/studyContext.svelte';
+	import { layout } from '$lib/stores/layout.svelte';
 	import LibraryReader from '$lib/components/library/LibraryReader.svelte';
 	import NodeContent from '$lib/components/library/NodeContent.svelte';
 	import PageNav from '$lib/components/library/PageNav.svelte';
-	import SidePanel from '$lib/components/SidePanel.svelte';
-	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let { data } = $props();
 
-	// Track mobile for sheet vs sidebar
-	let isMobile = $state(false);
-
-	onMount(() => {
-		const mediaQuery = window.matchMedia('(max-width: 768px)');
-		isMobile = mediaQuery.matches;
-
-		const handler = (e: MediaQueryListEvent) => {
-			isMobile = e.matches;
-		};
-		mediaQuery.addEventListener('change', handler);
-
-		return () => mediaQuery.removeEventListener('change', handler);
-	});
-
-	// Update store when page data changes
+	// Update stores when page data changes
 	$effect(() => {
+		// Update library store (for TOC in NavigationDrawer)
 		libraryStore.setWork(data.work);
 		libraryStore.setToc(data.toc);
 		libraryStore.setNode(data.node);
@@ -48,13 +32,40 @@
 			node: data.node.id,
 			nodeTitle: data.node.title || data.node.label
 		});
+
+		// Update study context (single source of truth)
+		const pos = {
+			type: 'library' as const,
+			workId: data.work.id,
+			workTitle: data.work.title,
+			nodeId: data.node.id,
+			nodeTitle: data.node.title || data.node.label
+		};
+		untrack(() => studyContext.navigate(pos));
+
+		// Set navigation links
+		const nav = data.node.navigation;
+		untrack(() =>
+			studyContext.setNavigation({
+				prev: nav?.prev ? `/library/${data.work.id}/${nav.prev.id}` : undefined,
+				next: nav?.next ? `/library/${data.work.id}/${nav.next.id}` : undefined
+			})
+		);
+
+		// Scroll to top when node changes (unless there's a hash)
+		if (!window.location.hash) {
+			const readerPane = document.querySelector('.reader-pane');
+			if (readerPane) {
+				readerPane.scrollTo({ top: 0, behavior: 'instant' });
+			}
+		}
 	});
 
-	// Close TOC when navigating on mobile
+	// Close drawer when navigating on mobile
 	$effect(() => {
 		$page.params.node;
-		if (isMobile) {
-			libraryStore.closeToc();
+		if (layout.isMobile) {
+			layout.closeDrawer();
 		}
 	});
 </script>
@@ -63,156 +74,56 @@
 	<title>{data.node.title || data.work.title} | Orthodox Reader</title>
 </svelte:head>
 
-<div class="library-layout">
-	<!-- Custom header for library mode -->
-	<LibraryHeader work={data.work} node={data.node} />
-
-	<div class="library-main">
-		<!-- Desktop: TOC sidebar -->
-		{#if !isMobile}
-			<aside class="toc-sidebar" class:open={libraryStore.tocOpen}>
-				<TocDrawer
-					work={data.work}
-					toc={data.toc}
-					workId={data.work.id}
-					onClose={() => libraryStore.closeToc()}
-				/>
-			</aside>
+<article class="library-page">
+	<header class="node-header">
+		<h1 class="node-title">
+			{data.node.title || data.node.label || data.work.title}
+		</h1>
+		{#if data.node.title && data.work.title !== data.node.title}
+			<p class="work-subtitle text-secondary">{data.work.title}</p>
 		{/if}
+	</header>
 
-		<!-- Reader area -->
-		<div class="reader-area">
-			{#key data.node.id}
-				<LibraryReader
-					navigation={data.node.navigation}
-					workId={data.work.id}
-					nodeId={data.node.id}
-				>
-					<NodeContent node={data.node} />
-				</LibraryReader>
-			{/key}
+	{#key data.node.id}
+		<LibraryReader
+			navigation={data.node.navigation}
+			workId={data.work.id}
+			nodeId={data.node.id}
+		>
+			<NodeContent node={data.node} />
+		</LibraryReader>
+	{/key}
 
-			<PageNav
-				navigation={data.node.navigation}
-				workId={data.work.id}
-			/>
-		</div>
-
-		<!-- Desktop: Side panel -->
-		{#if !isMobile}
-			<aside class="sidebar-pane" class:collapsed={ui.sidePanelCollapsed}>
-				{#if ui.sidePanelCollapsed}
-					<button
-						class="expand-rail"
-						onclick={() => ui.expandSidePanel()}
-						aria-label="Expand panel"
-					>
-						<Icon name="chevron-left" size={16} />
-					</button>
-				{:else}
-					<SidePanel />
-				{/if}
-			</aside>
-		{/if}
-	</div>
-
-	<!-- Mobile: TOC as sheet -->
-	{#if isMobile}
-		<Sheet bind:open={libraryStore.tocOpen} position="left">
-			<TocDrawer
-				work={data.work}
-				toc={data.toc}
-				workId={data.work.id}
-				onClose={() => libraryStore.closeToc()}
-			/>
-		</Sheet>
-	{/if}
-
-	<!-- Mobile: Side panel as sheet -->
-	{#if isMobile}
-		<Sheet bind:open={ui.sidePanelOpen}>
-			<SidePanel />
-		</Sheet>
-	{/if}
-</div>
+	<PageNav navigation={data.node.navigation} workId={data.work.id} />
+</article>
 
 <style>
-	.library-layout {
-		display: flex;
-		flex-direction: column;
-		height: 100dvh;
-		overflow: hidden;
-		background: var(--color-bg-base);
+	.library-page {
+		max-width: var(--content-max-width);
+		margin: 0 auto;
+		padding: var(--space-6) var(--space-4);
+		padding-bottom: calc(var(--space-16) + var(--bottom-nav-height, 0px));
 	}
 
-	.library-main {
-		display: flex;
-		flex: 1;
-		min-height: 0;
-		overflow: hidden;
+	@media (min-width: 768px) {
+		.library-page {
+			padding-bottom: var(--space-16);
+		}
 	}
 
-	.toc-sidebar {
-		width: 280px;
-		flex-shrink: 0;
-		border-right: 1px solid var(--color-border);
-		overflow: hidden;
-		transition: margin-left var(--transition-normal);
+	.node-header {
+		margin-bottom: var(--space-8);
+		text-align: center;
 	}
 
-	.toc-sidebar:not(.open) {
-		margin-left: -280px;
-	}
-
-	.reader-area {
-		flex: 3; /* 3:2 reader:panel ratio */
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-		overflow: hidden;
-	}
-
-	.sidebar-pane {
-		flex: 2; /* 3:2 reader:panel ratio */
-		min-width: 300px;
-		max-width: 50%;
-		border-left: 1px solid var(--color-border);
-		overflow: hidden;
-		background: var(--color-bg-surface);
-		transition: flex var(--transition-normal);
-	}
-
-	.sidebar-pane.collapsed {
-		flex: 0 0 48px;
-		min-width: 48px;
-		display: flex;
-		align-items: stretch;
-	}
-
-	.expand-rail {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 100%;
-		height: 100%;
-		color: var(--color-text-muted);
-		background: var(--color-bg-elevated);
-		cursor: pointer;
-		transition: color var(--transition-fast), background var(--transition-fast);
-	}
-
-	.expand-rail:hover {
+	.node-title {
+		font-size: var(--font-2xl);
+		font-weight: var(--font-normal);
 		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
 	}
 
-	@media (max-width: 768px) {
-		.toc-sidebar {
-			display: none;
-		}
-
-		.sidebar-pane {
-			display: none;
-		}
+	.work-subtitle {
+		font-size: var(--font-base);
+		margin-top: var(--space-2);
 	}
 </style>

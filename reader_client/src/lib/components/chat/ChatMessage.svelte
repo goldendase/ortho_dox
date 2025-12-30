@@ -6,8 +6,7 @@
   Assistant messages render as flowing report content with markdown.
 -->
 <script lang="ts">
-	import type { ChatMessage, ReaderPosition, LibraryPosition } from '$lib/stores';
-	import { formatPosition, formatLibraryPosition } from '$lib/stores';
+	import type { ChatMessage } from '$lib/stores';
 	import ChatMessageContent from './ChatMessageContent.svelte';
 
 	interface Props {
@@ -21,19 +20,6 @@
 		minute: '2-digit',
 		hour12: true
 	});
-
-	// Type guard for ReaderPosition (OSB)
-	function isReaderPosition(ctx: ReaderPosition | LibraryPosition): ctx is ReaderPosition {
-		return 'book' in ctx && 'chapter' in ctx;
-	}
-
-	// Format context based on type
-	function formatContext(ctx: ReaderPosition | LibraryPosition): string {
-		if (isReaderPosition(ctx)) {
-			return formatPosition(ctx);
-		}
-		return formatLibraryPosition(ctx);
-	}
 </script>
 
 {#if message.role === 'user'}
@@ -41,11 +27,6 @@
 	<div class="user-query">
 		<div class="query-header">
 			<span class="query-label font-ui">Question</span>
-			{#if message.context}
-				<span class="query-context text-muted font-ui">
-					{formatContext(message.context)}
-				</span>
-			{/if}
 			<span class="query-time text-muted font-ui">
 				{timeFormatter.format(message.timestamp)}
 			</span>
@@ -87,15 +68,6 @@
 		letter-spacing: var(--tracking-wide);
 	}
 
-	.query-context {
-		color: var(--color-text-muted);
-	}
-
-	.query-context::before {
-		content: '·';
-		margin-right: var(--space-3);
-	}
-
 	.query-time {
 		margin-left: auto;
 		color: var(--color-text-muted);
@@ -112,5 +84,7 @@
 	   ───────────────────────────────────────────────────── */
 	.assistant-response {
 		padding: var(--space-2) 0 var(--space-4) 0;
+		max-width: 50rem;
+		margin: 0 auto;
 	}
 </style>

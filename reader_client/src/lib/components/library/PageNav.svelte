@@ -57,8 +57,8 @@
 	.page-nav {
 		display: flex;
 		justify-content: center;
-		padding: var(--space-3) var(--space-4);
-		background: var(--color-bg-surface);
+		margin-top: var(--space-8);
+		padding-top: var(--space-6);
 		border-top: 1px solid var(--color-border);
 	}
 

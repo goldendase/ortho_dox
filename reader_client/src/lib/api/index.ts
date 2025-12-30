@@ -28,4 +28,15 @@ export {
 	getAuthorWorks,
 	getNodeContext
 } from './library';
+export {
+	semanticSearch,
+	searchOSB,
+	searchLibrary,
+	type OSBSearchResult,
+	type LibrarySearchResult,
+	type OSBSearchResponse,
+	type LibrarySearchResponse,
+	type OSBSearchOptions,
+	type LibrarySearchOptions
+} from './semanticSearch';
 export * from './types';

@@ -6,12 +6,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { reader, positionToPath, ui } from '$lib/stores';
+	import { studyContext, positionToPath } from '$lib/stores/studyContext.svelte';
+	import { layout } from '$lib/stores/layout.svelte';
 
 	onMount(() => {
 		// If we have a saved position, redirect there
-		if (reader.position) {
-			goto(positionToPath(reader.position), { replaceState: true });
+		const pos = studyContext.position;
+		if (pos) {
+			goto(positionToPath(pos), { replaceState: true });
 		}
 	});
 </script>
@@ -28,7 +30,7 @@
 		</p>
 
 		<div class="button-group">
-			<button class="start-button" onclick={() => ui.openBookPicker()}>
+			<button class="start-button" onclick={() => layout.openDrawer()}>
 				Orthodox Study Bible
 			</button>
 			<a href="/library" class="library-button">
