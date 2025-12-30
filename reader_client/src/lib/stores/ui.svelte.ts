@@ -34,9 +34,6 @@ export type SidePanelContent =
 export type SidePanelTab = 'notes' | 'settings';
 
 class UIStore {
-	/** Book picker sheet visibility */
-	bookPickerOpen = $state(false);
-
 	/**
 	 * Side panel content - proxied to layout store for unified handling.
 	 * This getter maintains backwards compatibility with components that
@@ -109,22 +106,6 @@ class UIStore {
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
-	// Book Picker Actions
-	// ─────────────────────────────────────────────────────────────────────────
-
-	openBookPicker(): void {
-		this.bookPickerOpen = true;
-	}
-
-	closeBookPicker(): void {
-		this.bookPickerOpen = false;
-	}
-
-	toggleBookPicker(): void {
-		this.bookPickerOpen = !this.bookPickerOpen;
-	}
-
-	// ─────────────────────────────────────────────────────────────────────────
 	// Side Panel Actions (Delegated to Layout Store)
 	// ─────────────────────────────────────────────────────────────────────────
 
@@ -185,7 +166,6 @@ class UIStore {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	reset(): void {
-		this.bookPickerOpen = false;
 		layout.closeStudyPanel();
 		this.sidePanelOpen = false;
 		this.sidePanelCollapsed = false;

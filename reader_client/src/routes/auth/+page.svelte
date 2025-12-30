@@ -6,7 +6,7 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { auth, reader, positionToPath } from '$lib/stores';
+	import { auth, studyContext, positionToPath } from '$lib/stores';
 
 	let secret = $state('');
 	let error = $state<string | null>(null);
@@ -23,7 +23,7 @@
 		auth.setSecret(secret.trim());
 
 		// Redirect to last reading position or home
-		const destination = reader.position ? positionToPath(reader.position) : '/';
+		const destination = studyContext.position ? positionToPath(studyContext.position) : '/';
 		goto(destination, { replaceState: true });
 	}
 </script>

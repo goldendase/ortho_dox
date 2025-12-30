@@ -261,11 +261,40 @@ export function libraryPositionToPath(pos: LibraryPosition): string {
 /**
  * Get display title for a TOC node
  */
-export function getTocNodeTitle(node: TocNode): string {
-	if (node.label && node.title) {
-		return `${node.label}. ${node.title}`;
+export function getTocNodeTitle(node: { label?: string; title?: string }): string {
+	const MAX_LEN = 25;
+	const hasLabel = !!node.label;
+	const hasTitle = !!node.title;
+
+	// 1. Construct full title
+	let display = 'Untitled';
+	if (hasLabel && hasTitle) {
+		display = `${node.label}. ${node.title}`;
+	} else if (hasTitle) {
+		display = node.title!;
+	} else if (hasLabel) {
+		display = node.label!;
 	}
-	return node.title || node.label || 'Untitled';
+
+	// 2. If short enough, use it
+	if (display.length <= MAX_LEN) {
+		return display;
+	}
+
+	// 3. Too long - prefer label
+	if (hasLabel) {
+		if (node.label!.length <= MAX_LEN) {
+			return node.label!;
+		}
+		return node.label!.substring(0, MAX_LEN) + '...';
+	}
+
+	// 4. No label - truncate title
+	if (hasTitle) {
+		return node.title!.substring(0, MAX_LEN) + '...';
+	}
+
+	return display;
 }
 
 /**

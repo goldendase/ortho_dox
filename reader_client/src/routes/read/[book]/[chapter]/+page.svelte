@@ -161,13 +161,7 @@
 		max-width: var(--content-max-width);
 		margin: 0 auto;
 		padding: var(--space-6) var(--space-4);
-		padding-bottom: calc(var(--space-16) + var(--bottom-nav-height));
-	}
-
-	@media (min-width: 768px) {
-		.reader-page {
-			padding-bottom: var(--space-16);
-		}
+		padding-bottom: var(--space-2);
 	}
 
 	.chapter-header {

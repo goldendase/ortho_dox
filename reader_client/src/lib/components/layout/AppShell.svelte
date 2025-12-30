@@ -224,7 +224,7 @@
 	/* Action bar spans full width */
 	.app-shell > :global(.action-bar) {
 		grid-column: 1 / -1;
-		grid-row: -1;
+		grid-row: -2 / -1;
 	}
 
 	/* Settings content */
@@ -303,6 +303,7 @@
 	@media (max-width: 768px) {
 		.read-layout {
 			grid-template-columns: 1fr !important;
+			grid-template-rows: var(--header-height) 1fr var(--action-bar-height, 56px);
 		}
 
 		.nav-drawer,

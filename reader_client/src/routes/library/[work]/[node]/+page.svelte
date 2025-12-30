@@ -11,7 +11,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { page } from '$app/stores';
-	import { libraryStore } from '$lib/stores/library.svelte';
+	import { libraryStore, getTocNodeTitle } from '$lib/stores/library.svelte';
 	import { studyContext } from '$lib/stores/studyContext.svelte';
 	import { layout } from '$lib/stores/layout.svelte';
 	import LibraryReader from '$lib/components/library/LibraryReader.svelte';
@@ -30,7 +30,7 @@
 			work: data.work.id,
 			workTitle: data.work.title,
 			node: data.node.id,
-			nodeTitle: data.node.title || data.node.label
+			nodeTitle: getTocNodeTitle(data.node)
 		});
 
 		// Update study context (single source of truth)
@@ -39,7 +39,7 @@
 			workId: data.work.id,
 			workTitle: data.work.title,
 			nodeId: data.node.id,
-			nodeTitle: data.node.title || data.node.label
+			nodeTitle: getTocNodeTitle(data.node)
 		};
 		untrack(() => studyContext.navigate(pos));
 
@@ -102,13 +102,7 @@
 		max-width: var(--content-max-width);
 		margin: 0 auto;
 		padding: var(--space-6) var(--space-4);
-		padding-bottom: calc(var(--space-16) + var(--bottom-nav-height, 0px));
-	}
-
-	@media (min-width: 768px) {
-		.library-page {
-			padding-bottom: var(--space-16);
-		}
+		padding-bottom: var(--space-2);
 	}
 
 	.node-header {
