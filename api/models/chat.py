@@ -1,9 +1,9 @@
 """Chat request and response models."""
 
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Discriminator, Field, Tag
 
 
 class MessageRole(str, Enum):
@@ -99,14 +99,18 @@ class LibraryFootnoteContextItem(BaseModel):
     text: str
 
 
-ContextItem = (
-    VerseContextItem
-    | VerseRangeContextItem
-    | ParagraphContextItem
-    | OsbNoteContextItem
-    | OsbArticleContextItem
-    | LibraryFootnoteContextItem
-)
+# Discriminated union based on 'type' field
+ContextItem = Annotated[
+    Union[
+        VerseContextItem,
+        VerseRangeContextItem,
+        ParagraphContextItem,
+        OsbNoteContextItem,
+        OsbArticleContextItem,
+        LibraryFootnoteContextItem,
+    ],
+    Discriminator("type"),
+]
 
 
 class ReadingContext(BaseModel):
