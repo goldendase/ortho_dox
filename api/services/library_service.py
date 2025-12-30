@@ -79,7 +79,7 @@ async def get_works(
 
     works = []
     for work in works_raw:
-        work_id = work.get("id", work["_id"])  # Support both id and _id for works
+        work_id = work["_id"]
         stats = stats_by_work.get(work_id, {})
         works.append(WorkSummary(
             id=work_id,
@@ -111,10 +111,7 @@ async def get_work(work_id: str) -> WorkDetail | None:
     """Get a single work with full details."""
     db = MongoDB.db_dox
 
-    # Try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id})
+    work = await db.library_works.find_one({"_id": work_id})
     if not work:
         return None
 
@@ -126,7 +123,7 @@ async def get_work(work_id: str) -> WorkDetail | None:
     ref_count = await db.library_scripture_refs.count_documents({"book_id": work_id})
 
     return WorkDetail(
-        id=work.get("id", work["_id"]),
+        id=work["_id"],
         title=work.get("title", ""),
         subtitle=work.get("subtitle"),
         authors=[
@@ -155,17 +152,15 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
     """Get work table of contents (tree without content)."""
     db = MongoDB.db_dox
 
-    # Verify work exists - try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id}, {"id": 1})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id}, {"_id": 1})
+    # Verify work exists
+    work = await db.library_works.find_one({"_id": work_id}, {"_id": 1})
     if not work:
         return None
 
     # Get all nodes for this work
     nodes_cursor = db.library_nodes.find(
         {"book_id": work_id},
-        {"id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
+        {"_id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
     )
     nodes_raw = await nodes_cursor.to_list(length=None)
 
@@ -173,7 +168,7 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
         return None
 
     # Build tree structure
-    nodes_by_id = {n["id"]: n for n in nodes_raw}
+    nodes_by_id = {n["_id"]: n for n in nodes_raw}
     children_by_parent: dict[str | None, list] = {}
 
     for node in nodes_raw:
@@ -187,7 +182,7 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
         children.sort(key=lambda n: n.get("order", 0))
 
     def build_toc_node(node_data: dict) -> NodeTOC:
-        node_id = node_data["id"]
+        node_id = node_data["_id"]
         children = children_by_parent.get(node_id, [])
         return NodeTOC(
             id=node_id,
@@ -242,13 +237,13 @@ async def get_node(
     """Get a single node with optional expansion."""
     db = MongoDB.db_dox
 
-    node = await db.library_nodes.find_one({"id": node_id, "book_id": work_id})
+    node = await db.library_nodes.find_one({"_id": node_id, "book_id": work_id})
     if not node:
         return None
 
     # Base fields
     base = NodeMinimal(
-        id=node["id"],
+        id=node["_id"],
         work_id=node.get("book_id", work_id),
         title=node.get("title"),
         label=node.get("label"),
@@ -274,10 +269,8 @@ async def get_node(
             navigation=navigation,
         )
 
-    # expand == FULL - try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id})
+    # expand == FULL
+    work = await db.library_works.find_one({"_id": work_id})
     author = None
     if work and work.get("authors"):
         a = work["authors"][0]
@@ -319,21 +312,21 @@ async def _get_node_components(work_id: str, node_id: str) -> ComponentsGroup:
 
         if comp_type == "footnote":
             footnotes.append(FootnoteComponent(
-                id=comp["id"],
+                id=comp["_id"],
                 type=ComponentType.FOOTNOTE,
                 marker=comp.get("marker", ""),
                 content=comp.get("content", ""),
             ))
         elif comp_type == "endnote":
             endnotes.append(FootnoteComponent(
-                id=comp["id"],
+                id=comp["_id"],
                 type=ComponentType.ENDNOTE,
                 marker=comp.get("marker", ""),
                 content=comp.get("content", ""),
             ))
         elif comp_type == "image":
             images.append(ImageComponent(
-                id=comp["id"],
+                id=comp["_id"],
                 type=ComponentType.IMAGE,
                 image_path=comp.get("image_path", ""),
                 caption=comp.get("caption"),
@@ -341,14 +334,14 @@ async def _get_node_components(work_id: str, node_id: str) -> ComponentsGroup:
             ))
         elif comp_type == "quote":
             quotes.append(QuoteComponent(
-                id=comp["id"],
+                id=comp["_id"],
                 type=ComponentType.QUOTE,
                 content=comp.get("content", ""),
                 attribution=comp.get("attribution"),
             ))
         elif comp_type == "epigraph":
             epigraphs.append(QuoteComponent(
-                id=comp["id"],
+                id=comp["_id"],
                 type=ComponentType.EPIGRAPH,
                 content=comp.get("content", ""),
                 attribution=comp.get("attribution"),
@@ -377,12 +370,12 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
     parent = None
     if parent_id:
         parent_data = await db.library_nodes.find_one(
-            {"id": parent_id},
-            {"id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1}
+            {"_id": parent_id},
+            {"_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1}
         )
         if parent_data:
             parent = NodeSummary(
-                id=parent_data["id"],
+                id=parent_data["_id"],
                 title=parent_data.get("title"),
                 label=parent_data.get("label"),
                 node_type=parent_data.get("node_type", "section"),
@@ -398,7 +391,7 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
         # Get all nodes for this work to build tree
         all_nodes = await db.library_nodes.find(
             {"book_id": work_id},
-            {"id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
+            {"_id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
         ).to_list(length=None)
 
         # Build tree and flatten to get leaves in reading order
@@ -406,11 +399,11 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
 
         # Find current node position and get adjacent leaves
         for i, leaf in enumerate(leaves):
-            if leaf["id"] == node_id:
+            if leaf["_id"] == node_id:
                 if i > 0:
                     p = leaves[i - 1]
                     prev_node = NodeSummary(
-                        id=p["id"],
+                        id=p["_id"],
                         title=p.get("title"),
                         label=p.get("label"),
                         node_type=p.get("node_type", "section"),
@@ -419,7 +412,7 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
                 if i < len(leaves) - 1:
                     n = leaves[i + 1]
                     next_node = NodeSummary(
-                        id=n["id"],
+                        id=n["_id"],
                         title=n.get("title"),
                         label=n.get("label"),
                         node_type=n.get("node_type", "section"),
@@ -430,15 +423,15 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
         # For non-leaf nodes, use sibling-based navigation
         siblings = await db.library_nodes.find(
             {"book_id": work_id, "parent_id": parent_id},
-            {"id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
+            {"_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
         ).sort("order", 1).to_list(length=None)
 
         for i, sib in enumerate(siblings):
-            if sib["id"] == node_id:
+            if sib["_id"] == node_id:
                 if i > 0:
                     p = siblings[i - 1]
                     prev_node = NodeSummary(
-                        id=p["id"],
+                        id=p["_id"],
                         title=p.get("title"),
                         label=p.get("label"),
                         node_type=p.get("node_type", "section"),
@@ -447,7 +440,7 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
                 if i < len(siblings) - 1:
                     n = siblings[i + 1]
                     next_node = NodeSummary(
-                        id=n["id"],
+                        id=n["_id"],
                         title=n.get("title"),
                         label=n.get("label"),
                         node_type=n.get("node_type", "section"),
@@ -468,7 +461,7 @@ def _flatten_to_leaves(nodes: list[dict]) -> list[dict]:
         return []
 
     # Build lookup structures
-    nodes_by_id = {n["id"]: n for n in nodes}
+    nodes_by_id = {n["_id"]: n for n in nodes}
     children_by_parent: dict[str | None, list[dict]] = {}
 
     for node in nodes:
@@ -493,7 +486,7 @@ def _flatten_to_leaves(nodes: list[dict]) -> list[dict]:
     def collect_leaves(node: dict) -> list[dict]:
         if node.get("is_leaf"):
             return [node]
-        children = children_by_parent.get(node["id"], [])
+        children = children_by_parent.get(node["_id"], [])
         leaves = []
         for child in children:
             leaves.extend(collect_leaves(child))
@@ -590,7 +583,7 @@ async def get_author_works(author_id: str) -> AuthorWorksResponse | None:
                 break
 
         works.append(WorkSummary(
-            id=work.get("id", work["_id"]),
+            id=work["_id"],
             title=work.get("title", ""),
             subtitle=work.get("subtitle"),
             authors=[
@@ -651,10 +644,8 @@ async def get_work_scripture_refs(
     """Get all scripture references from a work."""
     db = MongoDB.db_dox
 
-    # Verify work exists - try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id}, {"title": 1})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id}, {"title": 1})
+    # Verify work exists
+    work = await db.library_works.find_one({"_id": work_id}, {"title": 1})
     if not work:
         return None
 
@@ -670,10 +661,10 @@ async def get_work_scripture_refs(
     # Get node titles for context
     node_ids = list({r.get("source_node_id") for r in refs_raw if r.get("source_node_id")})
     nodes = await db.library_nodes.find(
-        {"id": {"$in": node_ids}},
-        {"id": 1, "title": 1}
+        {"_id": {"$in": node_ids}},
+        {"_id": 1, "title": 1}
     ).to_list(length=None)
-    node_titles = {n["id"]: n.get("title") for n in nodes}
+    node_titles = {n["_id"]: n.get("title") for n in nodes}
 
     refs = []
     for ref in refs_raw:
@@ -681,7 +672,7 @@ async def get_work_scripture_refs(
         preview = await _get_passage_preview(passage_id)
 
         refs.append(ScriptureRefDetail(
-            id=ref["id"],
+            id=ref["_id"],
             source_node_id=ref.get("source_node_id", ""),
             source_node_title=node_titles.get(ref.get("source_node_id")),
             reference_text=ref.get("reference_text", ""),
@@ -715,16 +706,14 @@ async def get_node_scripture_refs(
 
     # Verify node exists
     node = await db.library_nodes.find_one(
-        {"id": node_id, "book_id": work_id},
+        {"_id": node_id, "book_id": work_id},
         {"title": 1}
     )
     if not node:
         return None
 
-    # Get work title - try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id}, {"title": 1})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id}, {"title": 1})
+    # Get work title
+    work = await db.library_works.find_one({"_id": work_id}, {"title": 1})
 
     # Get refs
     refs_raw = await db.library_scripture_refs.find(
@@ -737,7 +726,7 @@ async def get_node_scripture_refs(
         preview = await _get_passage_preview(passage_id)
 
         refs.append(ScriptureRefDetail(
-            id=ref["id"],
+            id=ref["_id"],
             source_node_id=node_id,
             source_node_title=node.get("title"),
             reference_text=ref.get("reference_text", ""),
@@ -791,16 +780,16 @@ async def get_library_refs_for_passage(passage_id: str) -> PassageLibraryRefsRes
     node_ids = list({r.get("source_node_id") for r in refs_raw if r.get("source_node_id")})
 
     works = await db.library_works.find(
-        {"$or": [{"id": {"$in": work_ids}}, {"_id": {"$in": work_ids}}]},
-        {"_id": 1, "id": 1, "title": 1, "authors": 1}
+        {"_id": {"$in": work_ids}},
+        {"_id": 1, "title": 1, "authors": 1}
     ).to_list(length=None)
-    works_by_id = {w.get("id", w["_id"]): w for w in works}
+    works_by_id = {w["_id"]: w for w in works}
 
     nodes = await db.library_nodes.find(
-        {"id": {"$in": node_ids}},
-        {"id": 1, "title": 1, "content": 1}
+        {"_id": {"$in": node_ids}},
+        {"_id": 1, "title": 1, "content": 1}
     ).to_list(length=None)
-    nodes_by_id = {n["id"]: n for n in nodes}
+    nodes_by_id = {n["_id"]: n for n in nodes}
 
     library_refs = []
     for ref in refs_raw:
@@ -860,10 +849,8 @@ async def get_library_context(work_id: str, node_id: str) -> LibraryContextRespo
     if not node or not isinstance(node, NodeWithComponents):
         return None
 
-    # Get author - try id field first, fall back to _id
-    work = await db.library_works.find_one({"id": work_id})
-    if not work:
-        work = await db.library_works.find_one({"_id": work_id})
+    # Get author
+    work = await db.library_works.find_one({"_id": work_id})
     author = None
     if work and work.get("authors"):
         a = work["authors"][0]

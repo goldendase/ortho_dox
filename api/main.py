@@ -57,8 +57,7 @@ patristic commentary, cross-references, liturgical notes, and theological works 
 
 ## Documentation
 
-- [API_SPEC.md](./API_SPEC.md) - OSB API specification
-- [LIBRARY_SPEC.md](./LIBRARY_SPEC.md) - Library API specification
+- [API_SPEC.md](./API_SPEC.md) - Full API endpoint reference
 """
 
 TAGS_METADATA = [

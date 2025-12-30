@@ -201,13 +201,13 @@ async def search_library(
         db = MongoDB.db_dox
         node_docs = await db.library_nodes.find(
             {"pinecone_vector_id": {"$in": vector_ids}},
-            {"id": 1, "pinecone_vector_id": 1}
+            {"_id": 1, "pinecone_vector_id": 1}
         ).to_list(length=None)
 
         # Build mapping: vector_id -> logical node id
         vector_to_node_id: dict[str, str] = {}
         for doc in node_docs:
-            logical_id = doc.get("id", "")
+            logical_id = doc.get("_id", "")
             for vid in doc.get("pinecone_vector_id", []):
                 vector_to_node_id[vid] = logical_id
 
