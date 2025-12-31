@@ -1,24 +1,40 @@
 """OSB Chat Agent using DSPy ReAct.
 
-This module implements the chat agent using DSPy's ReAct pattern with native
+This module implements the chat agent using DSPy's ReAct pattern with
 tool calling. The agent has access to tools for querying Scripture, study notes,
 patristic commentary, and the theological library.
+
+Note: DSPy ReAct uses text-based tool calling (not native function calling)
+regardless of adapter settings. This is by design - DSPy found native function
+calling yields worse quality for ReAct agents.
+
+Supports both synchronous responses and SSE streaming.
 """
 
 import json
 import logging
 import time
+from collections.abc import AsyncIterator
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Callable
 
 import dspy
+from dspy.streaming import StatusMessageProvider, streamify
 
 from api.chat.context_builder import build_context
 from api.chat.history import compact_history
 from api.chat.tools import TOOLS as RAW_TOOLS, set_chat_context
-from api.models.chat import ChatMessage, ChatResponse, MessageRole, ReadingContext, ToolCall
+from api.models.chat import (
+    ChatMessage,
+    ChatResponse,
+    MessageRole,
+    ReadingContext,
+    StreamEvent,
+    StreamEventType,
+    ToolCall,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +151,46 @@ TOOLS = [_wrap_tool_with_logging(tool) for tool in RAW_TOOLS]
 
 
 # =============================================================================
+# Streaming Status Provider
+# =============================================================================
+
+# Human-friendly tool name mappings for status messages
+TOOL_DISPLAY_NAMES = {
+    "get_passage": "Reading passage",
+    "get_chapter": "Loading chapter",
+    "get_study_note": "Reading study note",
+    "get_connections": "Finding connections",
+    "search_annotations": "Searching annotations",
+    "list_library_works": "Listing library works",
+    "get_work_toc": "Loading table of contents",
+    "get_library_content": "Reading library content",
+    "search_osb_content": "Searching Scripture",
+    "search_library_content": "Searching library",
+}
+
+
+class OSBStatusProvider(StatusMessageProvider):
+    """Status message provider for streaming tool call updates."""
+
+    def tool_start_status_message(self, instance, inputs: dict) -> str:
+        """Called when a tool starts executing.
+
+        Args:
+            instance: The tool instance being called
+            inputs: Dict of input arguments to the tool
+        """
+        # Get tool name from the instance
+        tool_name = getattr(instance, "name", None) or str(instance)
+        display = TOOL_DISPLAY_NAMES.get(tool_name, f"Using {tool_name}")
+        return display
+
+    def tool_end_status_message(self, outputs) -> str | None:
+        """Called when a tool finishes. Return None to skip sending a message."""
+        # Don't send end messages - the next tool_start or final answer will follow
+        return None
+
+
+# =============================================================================
 # Load System Prompt
 # =============================================================================
 
@@ -189,6 +245,13 @@ class OSBAgent:
             signature=OSBSignature,
             tools=TOOLS,
             max_iters=MAX_TOOL_ITERATIONS,
+        )
+        # Streaming wrapper with status provider for SSE
+        # is_async_program=True because our tools are async
+        self.react_streaming = streamify(
+            self.react,
+            status_message_provider=OSBStatusProvider(),
+            is_async_program=True,
         )
         logger.info(f"OSBAgent initialized with model={model}, {len(TOOLS)} tools")
         chat_logger.debug(f"OSBAgent initialized: model={model}, tools={[t.name for t in TOOLS]}")
@@ -435,6 +498,117 @@ class OSBAgent:
         tool_calls, _ = self._extract_trajectory(result)
         return tool_calls
 
+    async def stream_forward(
+        self,
+        messages: list[ChatMessage],
+        reading_context: ReadingContext | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Process a chat request with streaming response.
+
+        Yields StreamEvent objects for:
+        - STATUS: Tool call status updates (e.g., "Searching library...")
+        - CHUNK: Answer text chunks as they're generated
+        - DONE: Final complete response
+        - ERROR: If something goes wrong
+
+        Args:
+            messages: Full conversation history including current question
+            reading_context: Current reading position (OSB passage or library node)
+
+        Yields:
+            StreamEvent objects for SSE transmission
+        """
+        request_id = datetime.now().strftime("%H%M%S%f")[:10]
+        request_start = time.perf_counter()
+        _reset_tool_timings()
+
+        if not messages:
+            yield StreamEvent(type=StreamEventType.ERROR, data="No messages provided")
+            return
+
+        # Build inputs for each DSPy field
+        system_str = SYSTEM_PROMPT
+        context_str = await build_context(reading_context)
+        history_str = await compact_history(messages[:-1])
+        question_str = messages[-1].content
+
+        # Strip debug flag if present (streaming doesn't support debug mode)
+        question_str = question_str.replace("@debug@", "").strip()
+
+        _log_separator(f"NEW STREAMING REQUEST [{request_id}]")
+        chat_logger.debug(f"Model: {self.model}")
+        _log_section("CURRENT QUESTION", question_str)
+        chat_logger.debug("--- STREAMING TOOL EXECUTION ---")
+
+        # Set chat context for relevance judge
+        judge_context = f"{history_str}\n\nUser: {question_str}" if history_str else f"User: {question_str}"
+        set_chat_context(judge_context)
+
+        # Accumulate raw LLM output for logging
+        raw_llm_output = []
+
+        try:
+            # Use streaming ReAct - streamify returns a callable, not a module
+            async for chunk in self.react_streaming(
+                system=system_str,
+                reading_context=context_str,
+                conversation=history_str,
+                question=question_str,
+            ):
+                # Check if it's a status message (tool updates)
+                if hasattr(chunk, "__class__") and "StatusMessage" in chunk.__class__.__name__:
+                    status_msg = str(chunk.message) if hasattr(chunk, "message") else str(chunk)
+                    chat_logger.debug(f"  STATUS: {status_msg}")
+                    yield StreamEvent(type=StreamEventType.STATUS, data=status_msg)
+
+                # Check if it's a LiteLLM streaming chunk (ModelResponseStream)
+                elif hasattr(chunk, "choices") and chunk.choices:
+                    # LiteLLM ModelResponseStream: text is in choices[0].delta.content
+                    delta = getattr(chunk.choices[0], "delta", None)
+                    if delta:
+                        content = getattr(delta, "content", None)
+                        if content:
+                            raw_llm_output.append(content)
+                            yield StreamEvent(type=StreamEventType.CHUNK, data=content)
+
+                # Check if it's the final Prediction
+                elif isinstance(chunk, dspy.Prediction) or hasattr(chunk, "answer"):
+                    answer = chunk.answer if hasattr(chunk, "answer") else str(chunk)
+
+                    # Log raw LLM output (includes reasoning, tool calls, etc.)
+                    if raw_llm_output:
+                        _log_section("RAW LLM OUTPUT (reasoning + tool calls)", "".join(raw_llm_output))
+
+                    # Log final answer
+                    _log_section("FINAL ANSWER (streamed)", answer)
+
+                    # Timing summary
+                    total_time = time.perf_counter() - request_start
+                    tool_timings = _get_tool_timings()
+                    chat_logger.debug(f"Total time: {total_time:.3f}s, Tools: {len(tool_timings)}")
+                    _log_separator(f"END STREAMING [{request_id}]")
+
+                    # Extract tool calls for the done event
+                    tool_calls, _ = self._extract_trajectory(chunk)
+
+                    yield StreamEvent(
+                        type=StreamEventType.DONE,
+                        data={
+                            "answer": answer,
+                            "tool_calls": [tc.model_dump() for tc in tool_calls],
+                        },
+                    )
+                    return
+
+                # Plain string chunks (actual text streaming from LLM)
+                elif isinstance(chunk, str):
+                    yield StreamEvent(type=StreamEventType.CHUNK, data=chunk)
+
+        except Exception as e:
+            chat_logger.debug(f"STREAMING ERROR: {e}")
+            logger.error(f"Streaming error: {e}")
+            yield StreamEvent(type=StreamEventType.ERROR, data=str(e))
+
 
 # =============================================================================
 # Module Interface
@@ -476,3 +650,23 @@ async def process_chat(
     """
     agent = get_agent()
     return await agent.forward(messages, context)
+
+
+async def process_chat_stream(
+    messages: list[ChatMessage],
+    context: ReadingContext | None = None,
+) -> AsyncIterator[StreamEvent]:
+    """Process a chat request with streaming response.
+
+    This is the streaming entry point called by the router.
+
+    Args:
+        messages: Conversation history from frontend
+        context: Current reading context
+
+    Yields:
+        StreamEvent objects for SSE transmission
+    """
+    agent = get_agent()
+    async for event in agent.stream_forward(messages, context):
+        yield event

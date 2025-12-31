@@ -1,6 +1,9 @@
 """Chat endpoint for OSB agent conversations."""
 
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from api.models.chat import ChatRequest, ChatResponse
 from api.services import chat_service
@@ -41,4 +44,61 @@ async def chat(request: ChatRequest) -> ChatResponse:
     return await chat_service.process_chat(
         messages=request.messages,
         context=request.context,
+    )
+
+
+@router.post("/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    """
+    Process a chat message with streaming response (SSE).
+
+    Same as `/chat` but returns Server-Sent Events for real-time updates.
+    The frontend receives events as they happen:
+
+    **Event types:**
+    - `status`: Tool execution status (e.g., "Searching library...")
+    - `chunk`: Partial answer text (token-by-token streaming)
+    - `done`: Final complete response with answer and tool_calls
+    - `error`: Error occurred during processing
+
+    **SSE format:**
+    ```
+    data: {"type": "status", "data": "Searching library..."}
+
+    data: {"type": "chunk", "data": "The passage..."}
+
+    data: {"type": "done", "data": {"answer": "...", "tool_calls": [...]}}
+    ```
+
+    **Usage (JavaScript):**
+    ```javascript
+    const response = await fetch('/chat/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages, context })
+    });
+    const reader = response.body.getReader();
+    // Process SSE chunks...
+    ```
+    """
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="Messages list cannot be empty")
+
+    async def event_generator():
+        """Generate SSE events from the streaming agent."""
+        async for event in chat_service.process_chat_stream(
+            messages=request.messages,
+            context=request.context,
+        ):
+            # Format as SSE: data: {json}\n\n
+            yield f"data: {event.model_dump_json()}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
     )

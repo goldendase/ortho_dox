@@ -158,10 +158,15 @@ export function parseLibraryRef(type: ChatAnnotationType, value: string): Librar
  */
 export function parseScriptureRef(value: string): ScriptureRef {
 	const parts = value.split(':');
-	const bookId = parts[0];
-	const chapter = parseInt(parts[1], 10);
+	const bookId = parts[0] || '';
+	const chapter = parts[1] ? parseInt(parts[1], 10) : NaN;
 
-	if (parts.length === 2) {
+	// Fallback for malformed refs
+	if (!bookId || isNaN(chapter)) {
+		return { bookId: value, chapter: 1, verseStart: null, verseEnd: null };
+	}
+
+	if (parts.length === 2 || !parts[2]) {
 		// Chapter only: "psalms:22"
 		return { bookId, chapter, verseStart: null, verseEnd: null };
 	}

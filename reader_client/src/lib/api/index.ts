@@ -13,7 +13,7 @@ export { books, listBooks, getBook, getChapterMeta, getChapterPassages, getVerse
 export { passages, getPassage, batchPassages } from './passages';
 export { annotations, getAnnotation, type AnnotationResult } from './annotations';
 export { context, getContext, getCrossRefs } from './context';
-export { chatApi, sendChatMessage } from './chat';
+export { chatApi, sendChatMessage, sendChatMessageStream } from './chat';
 export {
 	library,
 	listWorks,

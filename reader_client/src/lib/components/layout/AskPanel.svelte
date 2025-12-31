@@ -21,9 +21,29 @@
 	let inputValue = $state('');
 	let inputEl = $state<HTMLTextAreaElement | undefined>(undefined);
 	let messagesEl = $state<HTMLElement | undefined>(undefined);
+	let isSubmitting = false; // Guard against double submission
 
 	// Context section collapsed state
 	let contextCollapsed = $state(true);
+
+	// Track if user is near bottom (for smart auto-scroll)
+	let isNearBottom = $state(true);
+
+	// Check if scrolled near bottom (within 150px)
+	function checkNearBottom() {
+		if (!messagesEl) return;
+		const threshold = 150;
+		const distanceFromBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight;
+		isNearBottom = distanceFromBottom < threshold;
+	}
+
+	// Auto-scroll when streaming content updates, but only if user is near bottom
+	$effect(() => {
+		if (chat.streamingContent && messagesEl && isNearBottom) {
+			// Use instant scroll to avoid animation artifacts during rapid updates
+			messagesEl.scrollTop = messagesEl.scrollHeight;
+		}
+	});
 
 	// Derive context items from focusStack
 	let contextItems = $derived(studyContext.focusStack);
@@ -99,8 +119,10 @@
 	// Chat handlers
 	async function handleSubmit() {
 		const message = inputValue.trim();
-		if (!message || chat.isStreaming) return;
+		if (!message || chat.isStreaming || isSubmitting) return;
 
+		// Guard against double submission
+		isSubmitting = true;
 		inputValue = '';
 
 		// Reset textarea height
@@ -108,17 +130,32 @@
 			inputEl.style.height = 'auto';
 		}
 
-		await chat.send(message);
+		// Reset scroll tracking - user just sent a message, start auto-scrolling
+		isNearBottom = true;
 
-		requestAnimationFrame(() => {
-			messagesEl?.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
-		});
+		try {
+			// Start send (adds user message immediately, then starts streaming)
+			const sendPromise = chat.send(message);
+
+			// Scroll to show user message + thinking indicator after next render
+			requestAnimationFrame(() => {
+				if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight;
+			});
+
+			await sendPromise;
+		} finally {
+			isSubmitting = false;
+		}
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		// Shift+Enter for newline, plain Enter submits form
 		if (e.key === 'Enter' && !e.shiftKey) {
+			// Prevent newline insertion - form submission handled by browser naturally
 			e.preventDefault();
-			handleSubmit();
+			// Explicitly submit to ensure it happens (browser behavior varies)
+			const form = (e.target as HTMLElement).closest('form');
+			form?.requestSubmit();
 		}
 	}
 
@@ -193,7 +230,7 @@
 	{/if}
 
 	<!-- Messages -->
-	<div class="messages" bind:this={messagesEl}>
+	<div class="messages" bind:this={messagesEl} onscroll={checkNearBottom}>
 		{#if chat.messages.length === 0}
 			<div class="ask-empty-state">
 				<div class="empty-icon">
@@ -209,16 +246,86 @@
 				</p>
 			</div>
 		{:else}
-			{#each chat.messages as message (message.id)}
+			{#each chat.messages as message, i (message.id)}
+				{@const isLastAssistantMessage = message.role === 'assistant' && i === chat.messages.length - 1}
+				{@const showCompletedThinkingHere = isLastAssistantMessage && !chat.isStreaming}
+				<!-- Show completed thinking before the last assistant message -->
+				{#if showCompletedThinkingHere && chat.completedThinking}
+					{@const completed = chat.completedThinking}
+					<div class="thinking-indicator done" class:expanded={completed.expanded}>
+						<button
+							class="thinking-header"
+							onclick={() => chat.toggleCompletedThinking()}
+							aria-expanded={completed.expanded}
+						>
+							<Icon name="check" size={12} />
+							<span class="thinking-status">Reasoning</span>
+							<Icon name={completed.expanded ? 'chevron-up' : 'chevron-down'} size={14} />
+						</button>
+						{#if completed.expanded}
+							<div class="thinking-content">
+								{#each [...completed.entries].reverse() as entry}
+									<div class="thinking-entry {entry.type}">
+										<span class="entry-label">{entry.type === 'tool' ? entry.toolName : 'Thought'}</span>
+										<p>{entry.content}</p>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 				<ChatMessage {message} />
 			{/each}
 
 			{#if chat.isStreaming}
-				<div class="typing-indicator">
-					<span class="dot"></span>
-					<span class="dot"></span>
-					<span class="dot"></span>
+				{@const hasThinkingContent = chat.thinkingState.thinkingEntries.length > 0 || chat.thinkingState.currentThought}
+				<!-- In-progress thinking indicator - always show while streaming -->
+				<div class="thinking-indicator" class:expanded={chat.thinkingExpanded}>
+					<button
+						class="thinking-header"
+						onclick={() => chat.toggleThinkingExpanded()}
+						aria-expanded={chat.thinkingExpanded}
+						disabled={!hasThinkingContent}
+					>
+						<span class="thinking-dot"></span>
+						<span class="thinking-status">{chat.thinkingState.statusText}</span>
+						{#if hasThinkingContent}
+							<Icon name={chat.thinkingExpanded ? 'chevron-up' : 'chevron-down'} size={14} />
+						{/if}
+					</button>
+					{#if chat.thinkingExpanded && hasThinkingContent}
+						<div class="thinking-content">
+							<!-- Current thought (streaming) at top -->
+							{#if chat.thinkingState.currentThought}
+								<div class="thinking-entry thought current">
+									<span class="entry-label">Thinking</span>
+									<p>{chat.thinkingState.currentThought}</p>
+								</div>
+							{/if}
+							<!-- Previous entries in reverse order (most recent first) -->
+							{#each [...chat.thinkingState.thinkingEntries].reverse() as entry, i}
+								<div class="thinking-entry {entry.type}" class:first={i === 0 && !chat.thinkingState.currentThought}>
+									<span class="entry-label">{entry.type === 'tool' ? entry.toolName : 'Thought'}</span>
+									<p>{entry.content}</p>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				</div>
+
+				<!-- Streaming answer content -->
+				{#if chat.streamingContent}
+					<div class="streaming-message">
+						<ChatMessage
+							message={{
+								id: 'streaming',
+								role: 'assistant',
+								content: chat.streamingContent,
+								timestamp: new Date()
+							}}
+						/>
+					</div>
+				{/if}
 			{/if}
 		{/if}
 
@@ -482,36 +589,127 @@
 		line-height: var(--leading-normal);
 	}
 
-	.typing-indicator {
-		display: flex;
-		gap: var(--space-1);
-		padding: var(--space-2);
+	/* Thinking indicator */
+	.thinking-indicator {
+		background: var(--color-bg-elevated);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		margin-bottom: var(--space-2);
+		overflow: hidden;
+		position: relative;
+		z-index: 1;
+		flex-shrink: 0;
+		min-height: 36px; /* Ensure always visible */
 	}
 
-	.dot {
+	.thinking-header {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		width: 100%;
+		padding: var(--space-2) var(--space-3);
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		transition: background var(--transition-fast);
+	}
+
+	.thinking-header:hover {
+		background: var(--color-bg-hover);
+	}
+
+	.thinking-dot {
 		width: 6px;
 		height: 6px;
-		background: var(--color-text-muted);
+		background: var(--color-gold);
 		border-radius: var(--radius-full);
-		animation: bounce 1.4s infinite ease-in-out both;
+		animation: pulse 1.5s infinite;
+		flex-shrink: 0;
 	}
 
-	.dot:nth-child(1) {
-		animation-delay: -0.32s;
-	}
-	.dot:nth-child(2) {
-		animation-delay: -0.16s;
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.4; }
 	}
 
-	@keyframes bounce {
-		0%,
-		80%,
-		100% {
-			transform: scale(0);
-		}
-		40% {
-			transform: scale(1);
-		}
+	.thinking-status {
+		flex: 1;
+		font-family: var(--font-ui);
+		font-size: var(--font-xs);
+		color: var(--color-text-secondary);
+	}
+
+	.thinking-header :global(svg) {
+		color: var(--color-text-muted);
+		flex-shrink: 0;
+	}
+
+	.thinking-content {
+		padding: var(--space-2) var(--space-3);
+		padding-top: 0;
+		max-height: 250px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.thinking-entry {
+		padding: var(--space-2);
+		background: var(--color-bg-surface);
+		border-radius: var(--radius-sm);
+		border-left: 2px solid var(--color-border);
+	}
+
+	.thinking-entry.thought {
+		border-left-color: var(--color-gold-dim);
+	}
+
+	.thinking-entry.tool {
+		border-left-color: var(--color-text-muted);
+	}
+
+	.thinking-entry.current {
+		border-left-color: var(--color-gold);
+	}
+
+	.entry-label {
+		display: block;
+		font-family: var(--font-ui);
+		font-size: 10px;
+		font-weight: var(--font-semibold);
+		text-transform: uppercase;
+		letter-spacing: var(--tracking-wide);
+		color: var(--color-text-muted);
+		margin-bottom: var(--space-1);
+	}
+
+	.thinking-entry p {
+		font-family: var(--font-ui);
+		font-size: var(--font-xs);
+		color: var(--color-text-secondary);
+		line-height: var(--leading-relaxed);
+		white-space: pre-wrap;
+		margin: 0;
+	}
+
+	/* Done state */
+	.thinking-indicator.done .thinking-header {
+		cursor: pointer;
+	}
+
+	.thinking-indicator.done .thinking-dot {
+		display: none;
+	}
+
+	.thinking-indicator.done .thinking-header :global(svg:first-child) {
+		color: var(--color-success, #4ade80);
+	}
+
+	/* Streaming message */
+	.streaming-message {
+		opacity: 0.9;
 	}
 
 	.error-message {

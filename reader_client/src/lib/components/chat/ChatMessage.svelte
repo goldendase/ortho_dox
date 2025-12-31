@@ -51,6 +51,8 @@
 		background: var(--color-bg-elevated);
 		border-left: 3px solid var(--color-gold);
 		margin-bottom: var(--space-2);
+		flex-shrink: 0;
+		position: relative;
 	}
 
 	.query-header {

@@ -409,6 +409,26 @@ export interface ChatResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Chat Streaming
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** SSE event types from the backend */
+export type StreamEventType = 'status' | 'chunk' | 'done' | 'error';
+
+export interface StreamEvent {
+	type: StreamEventType;
+	data: string | { answer: string; tool_calls: ChatToolCall[] } | null;
+}
+
+/** Callback for streaming events */
+export interface StreamCallbacks {
+	onStatus?: (status: string) => void;
+	onChunk?: (text: string) => void;
+	onDone?: (answer: string, toolCalls: ChatToolCall[]) => void;
+	onError?: (error: string) => void;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Library - Enums
 // ─────────────────────────────────────────────────────────────────────────────
 

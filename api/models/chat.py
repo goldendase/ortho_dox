@@ -232,3 +232,26 @@ class ChatResponse(BaseModel):
         default=None,
         description="Error message if the request failed.",
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Streaming Events (SSE)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class StreamEventType(str, Enum):
+    """Types of streaming events."""
+
+    STATUS = "status"          # Tool/thinking status updates
+    TOOL_START = "tool_start"  # Tool execution starting
+    TOOL_END = "tool_end"      # Tool execution completed
+    CHUNK = "chunk"            # Answer text chunk
+    DONE = "done"              # Final complete response
+    ERROR = "error"            # Error occurred
+
+
+class StreamEvent(BaseModel):
+    """A streaming event sent via SSE."""
+
+    type: StreamEventType
+    data: dict | str | None = None

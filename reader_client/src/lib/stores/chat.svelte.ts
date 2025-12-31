@@ -4,15 +4,16 @@
  * Manages:
  * - Chat messages (UI format with metadata)
  * - Conversation history (API format for requests)
- * - Streaming state
+ * - Streaming state with thinking/status parsing
  * - Context from studyContext.focusStack (multi-item)
  * - Persistence to localStorage
  */
 
 import { browser } from '$app/environment';
 import { studyContext, type FocusItem } from './studyContext.svelte';
-import { sendChatMessage } from '$lib/api';
+import { sendChatMessageStream } from '$lib/api';
 import type { ChatContext as ApiChatContext, ChatMessage as ApiChatMessage } from '$lib/api';
+import { DspyStreamParser, type ParsedStreamState } from '$lib/utils/dspyStreamParser';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -104,8 +105,37 @@ class ChatStore {
 	/** Is the LLM currently responding */
 	isStreaming = $state(false);
 
+	/** Parsed thinking state from DSPy stream (in-progress) */
+	thinkingState = $state<ParsedStreamState>({
+		phase: 'idle',
+		thinkingEntries: [],
+		currentThought: '',
+		currentToolName: '',
+		statusText: 'Thinking...',
+		isAnswering: false,
+		answerContent: ''
+	});
+
+	/** Completed thinking from last response (persists until next send) */
+	completedThinking = $state<{ entries: ParsedStreamState['thinkingEntries']; expanded: boolean } | null>(null);
+
+	/** Is thinking panel expanded to show full content */
+	thinkingExpanded = $state(false);
+
+	/** Current streaming response text (for live updates) - now only for final answer phase */
+	streamingContent = $state('');
+
 	/** Error message if last request failed */
 	error = $state<string | null>(null);
+
+	/** AbortController for cancelling stream */
+	#streamController: AbortController | null = null;
+
+	/** DSPy stream parser instance */
+	#streamParser: DspyStreamParser | null = null;
+
+	/** Status history for fallback display when DSPy parsing doesn't capture entries */
+	#statusHistory: string[] = [];
 
 	/**
 	 * Build the API context from studyContext.focusStack.
@@ -237,7 +267,72 @@ class ChatStore {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Send a message to the chat API
+	 * Handle parsed stream state updates
+	 */
+	#handleStreamState(state: ParsedStreamState): void {
+		this.thinkingState = state;
+
+		// Update streaming content when in answer phase
+		if (state.isAnswering) {
+			this.streamingContent = state.answerContent;
+		}
+	}
+
+	/**
+	 * Reset thinking state for a new stream
+	 */
+	#resetThinkingState(): void {
+		this.thinkingState = {
+			phase: 'idle',
+			thinkingEntries: [],
+			currentThought: '',
+			currentToolName: '',
+			statusText: 'Thinking...',
+			isAnswering: false,
+			answerContent: ''
+		};
+		this.thinkingExpanded = false;
+	}
+
+	/**
+	 * Save current thinking entries as completed thinking
+	 */
+	#saveCompletedThinking(): void {
+		let entries = [
+			...this.thinkingState.thinkingEntries,
+			// Include current thought if any
+			...(this.thinkingState.currentThought.trim()
+				? [{ type: 'thought' as const, content: this.thinkingState.currentThought.trim() }]
+				: [])
+		];
+
+		// Fallback: if no parsed entries, use status history
+		if (entries.length === 0 && this.#statusHistory.length > 0) {
+			entries = this.#statusHistory.map((status) => ({
+				type: 'tool' as const,
+				content: status
+			}));
+		}
+
+		if (entries.length > 0) {
+			this.completedThinking = { entries, expanded: false };
+		}
+	}
+
+	/**
+	 * Toggle completed thinking expanded state
+	 */
+	toggleCompletedThinking(): void {
+		if (this.completedThinking) {
+			this.completedThinking = {
+				...this.completedThinking,
+				expanded: !this.completedThinking.expanded
+			};
+		}
+	}
+
+	/**
+	 * Send a message to the chat API with streaming
 	 *
 	 * Sends the full conversation history + current context with each request.
 	 * The API is stateless - we manage conversation state client-side.
@@ -245,28 +340,91 @@ class ChatStore {
 	async send(content: string): Promise<void> {
 		if (this.isStreaming) return;
 
+		// Reset state
 		this.error = null;
+		this.#resetThinkingState();
+		this.completedThinking = null; // Clear previous completed thinking
+		this.#statusHistory = []; // Clear status history
+		this.streamingContent = '';
+
 		this.#addUserMessage(content);
 		this.isStreaming = true;
 
+		// Create parser for this stream
+		this.#streamParser = new DspyStreamParser((state) => {
+			this.#handleStreamState(state);
+		});
+
 		try {
-			const response = await sendChatMessage(
+			this.#streamController = await sendChatMessageStream(
 				this.#conversationHistory,
-				this.currentContext
+				this.currentContext,
+				{
+					onStatus: (status) => {
+						// Backend status events (tool start messages from OSBStatusProvider)
+						// These are human-readable already, update our status
+						this.thinkingState = {
+							...this.thinkingState,
+							statusText: status
+						};
+						// Track for fallback display
+						this.#statusHistory.push(status);
+					},
+					onChunk: (text) => {
+						// Process through DSPy parser
+						this.#streamParser?.processChunk(text);
+					},
+					onDone: (_backendAnswer) => {
+						// Use the answer we parsed from the stream, not the backend's
+						// (backend may include extra DSPy metadata/JSON we don't want)
+						const parsedAnswer = this.thinkingState.answerContent || this.streamingContent;
+
+						// Save thinking entries before clearing
+						this.#saveCompletedThinking();
+						// Clear streaming state
+						this.streamingContent = '';
+						this.#resetThinkingState();
+						this.#addAssistantMessage(parsedAnswer);
+						this.isStreaming = false;
+						this.#streamController = null;
+						this.#streamParser = null;
+					},
+					onError: (error) => {
+						this.error = error;
+						this.isStreaming = false;
+						this.streamingContent = '';
+						this.#streamController = null;
+						this.#streamParser = null;
+					}
+				}
 			);
-
-			// Add assistant response to our state
-			this.#addAssistantMessage(response.message.content);
-
-			// Check for API-level errors (agent had issues but returned gracefully)
-			if (response.error) {
-				console.warn('Chat API error:', response.error);
-			}
 		} catch (err) {
 			this.error = err instanceof Error ? err.message : 'Failed to send message';
-		} finally {
 			this.isStreaming = false;
+			this.streamingContent = '';
+			this.#streamParser = null;
 		}
+	}
+
+	/**
+	 * Cancel the current streaming request
+	 */
+	cancelStream(): void {
+		if (this.#streamController) {
+			this.#streamController.abort();
+			this.#streamController = null;
+			this.isStreaming = false;
+			this.streamingContent = '';
+			this.#resetThinkingState();
+			this.#streamParser = null;
+		}
+	}
+
+	/**
+	 * Toggle thinking panel expanded state
+	 */
+	toggleThinkingExpanded(): void {
+		this.thinkingExpanded = !this.thinkingExpanded;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -277,10 +435,15 @@ class ChatStore {
 	 * Clear all messages and start a new conversation
 	 */
 	clearSession(): void {
+		// Cancel any ongoing stream
+		this.cancelStream();
+
 		this.messages = [];
 		this.#conversationHistory = [];
 		this.error = null;
 		this.isStreaming = false;
+		this.#resetThinkingState();
+		this.streamingContent = '';
 
 		// Clear from localStorage
 		if (browser) {
