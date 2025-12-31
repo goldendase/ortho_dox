@@ -42,6 +42,8 @@ class LibraryResultModel(BaseModel):
     node_id: str = Field(description="Node ID within the work")
     node_title: Optional[str] = Field(default=None, description="Node title")
     author_id: Optional[str] = Field(default=None, description="Author ID")
+    work_title: Optional[str] = Field(default=None, description="Work title")
+    author_name: Optional[str] = Field(default=None, description="Author display name")
     chunk_sequence: Optional[int] = Field(default=None, description="Chunk sequence in node")
     scripture_refs: Optional[list[str]] = Field(default=None, description="Scripture references in text")
 
@@ -136,6 +138,8 @@ async def semantic_search_library(
                 node_id=r.node_id,
                 node_title=r.node_title,
                 author_id=r.author_id,
+                work_title=r.work_title,
+                author_name=r.author_name,
                 chunk_sequence=r.chunk_sequence,
                 scripture_refs=r.scripture_refs,
             )

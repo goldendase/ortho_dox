@@ -292,10 +292,23 @@
 										{/if}
 									{:else}
 										{@const libResult = result as LibrarySearchResult}
-										<span class="result-type type-library">Library</span>
-										<span class="result-ref">{libResult.node_title || libResult.node_id}</span>
+										<div class="result-lib-info">
+											<div class="result-lib-top">
+												<span class="result-type type-library">Library</span>
+												{#if libResult.work_title}
+													<span class="result-work">{libResult.work_title}</span>
+												{/if}
+												{#if libResult.author_name}
+													<span class="result-author">by {libResult.author_name}</span>
+												{/if}
+												<span class="result-score">{formatScore(result.score)}</span>
+											</div>
+											<span class="result-node">{libResult.node_title || libResult.node_id}</span>
+										</div>
 									{/if}
-									<span class="result-score">{formatScore(result.score)}</span>
+									{#if source === 'osb'}
+										<span class="result-score">{formatScore(result.score)}</span>
+									{/if}
 								</div>
 								<Icon name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} class="expand-icon" />
 							</button>
@@ -642,6 +655,41 @@
 	.result-type.type-library {
 		background: rgba(186, 135, 189, 0.15);
 		color: #ba87bd;
+	}
+
+	.result-lib-info {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		flex: 1;
+		min-width: 0;
+	}
+
+	.result-lib-top {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+
+	.result-work {
+		font-family: var(--font-ui);
+		font-size: var(--font-sm);
+		font-weight: var(--font-medium);
+		color: var(--color-text-primary);
+	}
+
+	.result-author {
+		font-family: var(--font-ui);
+		font-size: var(--font-xs);
+		color: var(--color-text-muted);
+		font-style: italic;
+	}
+
+	.result-node {
+		font-family: var(--font-ui);
+		font-size: var(--font-xs);
+		color: var(--color-gold);
 	}
 
 	.result-ref {

@@ -32,6 +32,8 @@ export interface LibrarySearchResult {
 	node_id: string;
 	node_title?: string;
 	author_id?: string;
+	work_title?: string;
+	author_name?: string;
 	chunk_sequence?: number;
 	scripture_refs?: string[];
 }

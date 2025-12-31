@@ -79,6 +79,8 @@ class LibrarySearchResult:
     node_id: str
     node_title: Optional[str] = None
     author_id: Optional[str] = None
+    work_title: Optional[str] = None
+    author_name: Optional[str] = None
     chunk_sequence: Optional[int] = None
     scripture_refs: Optional[list[str]] = None
 
@@ -211,21 +213,49 @@ async def search_library(
             for vid in doc.get("pinecone_vector_id", []):
                 vector_to_node_id[vid] = logical_id
 
-        # Build results with resolved node IDs
+        # Collect unique work_ids and author_ids to resolve titles/names
+        work_ids = list({m.metadata.get("work_id") for m in valid_matches if m.metadata and m.metadata.get("work_id")})
+
+        # Look up works to get titles and author_ids
+        work_docs = await db.library_works.find(
+            {"_id": {"$in": work_ids}},
+            {"_id": 1, "title": 1, "author_id": 1}
+        ).to_list(length=None)
+
+        work_titles: dict[str, str] = {}
+        work_author_ids: dict[str, str] = {}
+        for doc in work_docs:
+            work_titles[doc["_id"]] = doc.get("title", "")
+            if doc.get("author_id"):
+                work_author_ids[doc["_id"]] = doc["author_id"]
+
+        # Collect all author_ids and resolve to display names
+        author_ids = list(set(work_author_ids.values()))
+        author_docs = await db.library_authors.find(
+            {"_id": {"$in": author_ids}},
+            {"_id": 1, "display_name": 1}
+        ).to_list(length=None)
+        author_names: dict[str, str] = {doc["_id"]: doc.get("display_name", doc["_id"]) for doc in author_docs}
+
+        # Build results with resolved node IDs, work titles, and author names
         search_results = []
         for match in valid_matches:
             meta = match.metadata or {}
 
             # Look up logical node_id, fall back to metadata node_id if not found
             resolved_node_id = vector_to_node_id.get(match.id, meta.get("node_id", ""))
+            work_id = meta.get("work_id", "")
+            author_id = meta.get("author_id") or work_author_ids.get(work_id)
 
             result = LibrarySearchResult(
                 score=match.score,
                 text=meta.get("text", ""),
-                work_id=meta.get("work_id", ""),
+                work_id=work_id,
                 node_id=resolved_node_id,
                 node_title=meta.get("node_title"),
-                author_id=meta.get("author_id"),
+                author_id=author_id,
+                work_title=work_titles.get(work_id),
+                author_name=author_names.get(author_id) if author_id else None,
                 chunk_sequence=meta.get("chunk_sequence"),
                 scripture_refs=meta.get("scripture_refs"),
             )
