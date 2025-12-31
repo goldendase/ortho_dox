@@ -226,6 +226,12 @@ class OSBAgent:
         history_str = await compact_history(messages[:-1])  # All but current question
         question_str = messages[-1].content
 
+        # Check for debug mode flag
+        debug_mode = "@debug@" in question_str
+        if debug_mode:
+            # Strip the debug flag from the question sent to the LLM
+            question_str = question_str.replace("@debug@", "").strip()
+
         # =================================================================
         # LOG: Full LLM Input
         # =================================================================
@@ -262,9 +268,27 @@ class OSBAgent:
                     question=question_str,
                 )
 
-                if result and hasattr(result, 'answer') and result.answer:
-                    tool_calls = self._extract_tool_calls(result)
+                # ALWAYS extract and log trajectory (even if answer is empty/missing)
+                tool_calls, reasoning_steps = [], []
+                if result:
+                    tool_calls, reasoning_steps = self._extract_trajectory(result)
 
+                # ==========================================================
+                # LOG: LLM Reasoning (ALWAYS logged when available)
+                # ==========================================================
+                if reasoning_steps:
+                    chat_logger.debug("")
+                    chat_logger.debug("╔══════════════════════════════════════════════════════════════════════════════╗")
+                    chat_logger.debug("║                           LLM REASONING / THINKING                           ║")
+                    chat_logger.debug("╚══════════════════════════════════════════════════════════════════════════════╝")
+                    for i, thought in enumerate(reasoning_steps, 1):
+                        chat_logger.debug(f"")
+                        chat_logger.debug(f"[Step {i}]")
+                        chat_logger.debug(thought)
+                    chat_logger.debug("")
+                    chat_logger.debug("════════════════════════════════════════════════════════════════════════════════")
+
+                if result and hasattr(result, 'answer') and result.answer:
                     # ==========================================================
                     # LOG: Final Response
                     # ==========================================================
@@ -292,10 +316,30 @@ class OSBAgent:
                         len(result.answer),
                     )
 
+                    # Build final answer, optionally with debug info
+                    final_answer = result.answer
+                    if debug_mode:
+                        debug_lines = ["[DEBUG]"]
+                        # Add reasoning
+                        if reasoning_steps:
+                            debug_lines.append("**Reasoning:**")
+                            for i, thought in enumerate(reasoning_steps, 1):
+                                debug_lines.append(f"{i}. {thought}")
+                            debug_lines.append("")
+                        # Add tool calls (name and args only, no results)
+                        if tool_calls:
+                            debug_lines.append("**Tool Calls:**")
+                            for tc in tool_calls:
+                                args_str = json.dumps(tc.arguments, default=str)
+                                debug_lines.append(f"- `{tc.name}({args_str})`")
+                        debug_lines.append("[/DEBUG]")
+                        debug_lines.append("")
+                        final_answer = "\n".join(debug_lines) + final_answer
+
                     return ChatResponse(
                         message=ChatMessage(
                             role=MessageRole.ASSISTANT,
-                            content=result.answer,
+                            content=final_answer,
                         ),
                         tool_calls=tool_calls,
                     )
@@ -334,6 +378,51 @@ class OSBAgent:
             error=str(last_error) if last_error else "Failed to generate response",
         )
 
+    def _extract_trajectory(self, result) -> tuple[list[ToolCall], list[str]]:
+        """Extract tool calls and reasoning from ReAct result.
+
+        DSPy ReAct stores trajectory as a dict with indexed keys:
+        - thought_0, thought_1, ... (reasoning at each step)
+        - tool_name_0, tool_name_1, ... (tool selected)
+        - tool_args_0, tool_args_1, ... (arguments as dict)
+        - observation_0, observation_1, ... (tool results)
+
+        Args:
+            result: The ReAct result (dspy.Prediction with trajectory attribute)
+
+        Returns:
+            Tuple of (tool_calls, reasoning_steps)
+        """
+        tool_calls = []
+        reasoning_steps = []
+
+        trajectory = getattr(result, 'trajectory', None)
+
+        if trajectory and isinstance(trajectory, dict):
+            # Find how many iterations occurred by looking for thought_N keys
+            idx = 0
+            while f"thought_{idx}" in trajectory or f"tool_name_{idx}" in trajectory:
+                # Extract reasoning/thought for this step
+                thought = trajectory.get(f"thought_{idx}")
+                if thought:
+                    reasoning_steps.append(str(thought))
+
+                # Extract tool call for this step
+                tool_name = trajectory.get(f"tool_name_{idx}")
+                tool_args = trajectory.get(f"tool_args_{idx}", {})
+                observation = trajectory.get(f"observation_{idx}")
+
+                if tool_name and tool_name != "finish":
+                    tool_calls.append(ToolCall(
+                        name=tool_name,
+                        arguments=tool_args if isinstance(tool_args, dict) else {"input": tool_args},
+                        result=observation,
+                    ))
+
+                idx += 1
+
+        return tool_calls, reasoning_steps
+
     def _extract_tool_calls(self, result) -> list[ToolCall]:
         """Extract tool calls from ReAct result for logging/transparency.
 
@@ -343,28 +432,7 @@ class OSBAgent:
         Returns:
             List of ToolCall objects showing what tools were used
         """
-        tool_calls = []
-
-        # ReAct stores trajectory information
-        # The exact attribute depends on DSPy version
-        trajectory = getattr(result, 'trajectory', None) or getattr(result, 'actions', None)
-
-        if trajectory:
-            for item in trajectory:
-                if hasattr(item, 'tool') and hasattr(item, 'tool_input'):
-                    tool_calls.append(ToolCall(
-                        name=item.tool,
-                        arguments=item.tool_input if isinstance(item.tool_input, dict) else {"input": item.tool_input},
-                        result=getattr(item, 'observation', None),
-                    ))
-                elif isinstance(item, dict):
-                    if 'tool' in item:
-                        tool_calls.append(ToolCall(
-                            name=item.get('tool', 'unknown'),
-                            arguments=item.get('tool_input', {}),
-                            result=item.get('observation'),
-                        ))
-
+        tool_calls, _ = self._extract_trajectory(result)
         return tool_calls
 
 

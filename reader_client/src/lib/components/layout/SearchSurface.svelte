@@ -179,10 +179,6 @@
 </script>
 
 <div class="search-surface">
-	<button class="close-btn" onclick={() => layout.setMode('read')} aria-label="Close">
-		<Icon name="x" size={24} />
-	</button>
-
 	<div class="search-container">
 		<!-- Header -->
 		<header class="page-header">
@@ -353,27 +349,6 @@
 		padding: var(--space-4);
 		padding-bottom: var(--space-16);
 		position: relative;
-	}
-
-	/* Close button - top right, stays fixed while scrolling */
-	.close-btn {
-		position: fixed;
-		top: var(--space-4);
-		right: var(--space-4);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: var(--space-2);
-		color: var(--color-text-muted);
-		background: var(--color-bg-base);
-		border-radius: var(--radius-md);
-		transition: color var(--transition-fast), background var(--transition-fast);
-		z-index: 10;
-	}
-
-	.close-btn:hover {
-		color: var(--color-text-primary);
-		background: var(--color-bg-hover);
 	}
 
 	/* Container */
@@ -810,11 +785,6 @@
 		.search-surface {
 			padding: var(--space-3);
 			padding-bottom: var(--space-12);
-		}
-
-		.close-btn {
-			top: var(--space-2);
-			right: var(--space-2);
 		}
 
 		.page-header {

@@ -74,7 +74,8 @@ export function parseMarkdownWithAnnotations(content: string): {
 		const dataJson = encodeURIComponent(JSON.stringify({
 			type: annotation.type,
 			value: annotation.value,
-			scriptureRef: annotation.scriptureRef
+			scriptureRef: annotation.scriptureRef,
+			libraryRef: annotation.libraryRef
 		}));
 
 		return `<button class="annotation-link ${typeClass}" data-annotation="${dataJson}" data-annotation-id="${id}">${escapeHtml(displayText)}</button>`;
@@ -139,6 +140,10 @@ function getAnnotationTypeClass(type: ChatAnnotation['type']): string {
 			return 'ref-citation';
 		case 'article':
 			return 'ref-article';
+		case 'lib-work':
+		case 'lib-node':
+		case 'lib-footnote':
+			return 'ref-library';
 		default:
 			return '';
 	}

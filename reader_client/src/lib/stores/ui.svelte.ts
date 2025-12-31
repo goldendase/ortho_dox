@@ -11,7 +11,7 @@
  * for existing components.
  */
 
-import type { StudyNote, LiturgicalNote, VariantNote, Article, PassageWithAnnotations } from '$lib/api';
+import type { StudyNote, LiturgicalNote, VariantNote, Article, PassageWithAnnotations, LibraryFootnote } from '$lib/api';
 import { layout } from './layout.svelte';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,6 +144,14 @@ class UIStore {
 	/** Show a passage preview in the side panel (from cross-ref click) */
 	showPassage(passage: PassageWithAnnotations, title: string): void {
 		layout.showPassagePreview(passage, title);
+		this.sidePanelTab = 'notes';
+		this.sidePanelOpen = true;
+		this.sidePanelCollapsed = false;
+	}
+
+	/** Show a library component (footnote/endnote) in the side panel */
+	showLibraryComponent(component: LibraryFootnote): void {
+		layout.showFootnote(component);
 		this.sidePanelTab = 'notes';
 		this.sidePanelOpen = true;
 		this.sidePanelCollapsed = false;

@@ -4,9 +4,11 @@ Handles:
 - Formatting message history for DSPy signature input
 - Token estimation for history length
 - Compaction via summarization when history exceeds threshold
+- Stripping debug blocks from previous responses
 """
 
 import logging
+import re
 
 import dspy
 
@@ -14,12 +16,33 @@ from api.models.chat import ChatMessage, MessageRole
 
 logger = logging.getLogger(__name__)
 
+# Regex to match and strip [DEBUG]...[/DEBUG] blocks (including newlines)
+_DEBUG_BLOCK_PATTERN = re.compile(
+    r'\[DEBUG\].*?\[/DEBUG\]\s*',
+    re.DOTALL  # Make . match newlines
+)
+
 # Token threshold for compaction (approximate)
 MAX_HISTORY_TOKENS = 40000
 # Keep this many recent message pairs intact when compacting
 KEEP_RECENT_PAIRS = 5
 # Approximate chars per token (conservative estimate)
 CHARS_PER_TOKEN = 3.5
+
+
+def strip_debug_blocks(content: str) -> str:
+    """Remove [DEBUG]...[/DEBUG] blocks from message content.
+
+    These blocks are added when users use @debug@ mode and should
+    not be included in conversation history sent to the LLM.
+
+    Args:
+        content: Message content that may contain debug blocks
+
+    Returns:
+        Content with debug blocks removed
+    """
+    return _DEBUG_BLOCK_PATTERN.sub('', content)
 
 
 def estimate_tokens(text: str) -> int:
@@ -34,6 +57,9 @@ def estimate_tokens(text: str) -> int:
 def format_history(messages: list[ChatMessage]) -> str:
     """Format conversation history for DSPy input.
 
+    Strips [DEBUG]...[/DEBUG] blocks from assistant messages so the
+    LLM doesn't see previous debug output in the conversation history.
+
     Args:
         messages: List of chat messages (excluding current question)
 
@@ -46,7 +72,11 @@ def format_history(messages: list[ChatMessage]) -> str:
     lines = []
     for msg in messages:
         role_label = "User" if msg.role == MessageRole.USER else "Assistant"
-        lines.append(f"**{role_label}:** {msg.content}")
+        # Strip debug blocks from assistant messages
+        content = msg.content
+        if msg.role == MessageRole.ASSISTANT:
+            content = strip_debug_blocks(content)
+        lines.append(f"**{role_label}:** {content}")
         lines.append("")
 
     return "\n".join(lines).strip()

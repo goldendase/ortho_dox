@@ -10,8 +10,9 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { getAnnotation, ApiError } from '$lib/api';
+	import { getAnnotation, getNode, ApiError } from '$lib/api';
 	import { ui } from '$lib/stores';
+	import { layout } from '$lib/stores/layout.svelte';
 	import { studyContext } from '$lib/stores/studyContext.svelte';
 	import type { ChatAnnotation } from '$lib/utils/chatAnnotations';
 	import { parseMarkdownWithAnnotations } from '$lib/utils/markdown';
@@ -37,6 +38,9 @@
 		if (!ref) return;
 
 		const { bookId, chapter, verseStart } = ref;
+
+		// Switch to read mode before navigating
+		layout.setMode('read');
 
 		// Check if we're already on this chapter
 		const currentPos = studyContext.scripturePosition;
@@ -68,7 +72,76 @@
 	 */
 	async function handleBookClick(annotation: ChatAnnotation) {
 		const bookId = annotation.value;
+		layout.setMode('read');
 		await goto(`/read/${bookId}/1`);
+	}
+
+	/**
+	 * Handle click on a library work reference
+	 * Navigates to the work's landing page in the library
+	 */
+	async function handleLibraryWorkClick(annotation: ChatAnnotation) {
+		const ref = annotation.libraryRef;
+		if (!ref) return;
+
+		layout.setMode('read');
+		await goto(`/library/${ref.workId}`);
+	}
+
+	/**
+	 * Handle click on a library node reference
+	 * Navigates to the specific section in the library
+	 */
+	async function handleLibraryNodeClick(annotation: ChatAnnotation) {
+		const ref = annotation.libraryRef;
+		if (!ref?.nodeId) return;
+
+		layout.setMode('read');
+		await goto(`/library/${ref.workId}/${ref.nodeId}`);
+	}
+
+	/**
+	 * Handle click on a library footnote reference
+	 * Fetches the node, navigates to it, and shows the footnote in study panel
+	 */
+	async function handleLibraryFootnoteClick(annotation: ChatAnnotation, buttonId: string) {
+		const ref = annotation.libraryRef;
+		if (!ref?.nodeId || !ref?.componentId) return;
+
+		// Don't re-fetch if already loading
+		if (loadingAnnotationId === buttonId) return;
+		loadingAnnotationId = buttonId;
+
+		try {
+			// Fetch the node with components
+			const node = await getNode(ref.workId, ref.nodeId, 'components');
+
+			// Find the footnote/endnote by ID (only leaf nodes have components)
+			let component = undefined;
+			if (node.is_leaf && node.components) {
+				const footnotes = [
+					...(node.components.footnotes || []),
+					...(node.components.endnotes || [])
+				];
+				component = footnotes.find((fn) => fn.id === ref.componentId);
+			}
+
+			// Navigate to the library node
+			layout.setMode('read');
+			await goto(`/library/${ref.workId}/${ref.nodeId}`);
+
+			// Show the component in study panel if found
+			if (component) {
+				ui.showLibraryComponent(component);
+			}
+		} catch (error) {
+			console.error('Failed to fetch library footnote:', error);
+			// Still navigate even if fetch fails
+			layout.setMode('read');
+			await goto(`/library/${ref.workId}/${ref.nodeId}`);
+		} finally {
+			loadingAnnotationId = null;
+		}
 	}
 
 	/**
@@ -85,6 +158,9 @@
 
 		try {
 			const result = await getAnnotation(annotationId);
+
+			// Switch to read mode so the study panel is visible
+			layout.setMode('read');
 
 			// Show in side panel based on type
 			switch (result.type) {
@@ -144,6 +220,16 @@
 				case 'citation':
 				case 'article':
 					handleAnnotationClick(annotation, buttonId);
+					break;
+				// Library reference types
+				case 'lib-work':
+					handleLibraryWorkClick(annotation);
+					break;
+				case 'lib-node':
+					handleLibraryNodeClick(annotation);
+					break;
+				case 'lib-footnote':
+					handleLibraryFootnoteClick(annotation, buttonId);
 					break;
 			}
 		} catch (e) {
@@ -417,5 +503,9 @@
 
 	.markdown-content :global(.ref-article) {
 		color: var(--color-annotation-article, #c084fc);
+	}
+
+	.markdown-content :global(.ref-library) {
+		color: var(--color-annotation-library, #60a5fa);
 	}
 </style>

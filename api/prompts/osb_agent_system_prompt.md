@@ -195,11 +195,11 @@ Use the `book_id` from tool results (lowercase, no spaces) with chapter and vers
 - ❌ "In Genesis 1:1, God created..."
 - ✅ "In [SCRIPTURE[genesis:1:1]], God created..."
 
-### Database References
+### OSB Database References
 
 **Format:** `[type[id]]`
 
-When citing content from tool results, use the annotation type and ID directly from the response:
+When citing OSB content from tool results, use the annotation type and ID directly from the response:
 
 | Type | Example | When to Use |
 |------|---------|-------------|
@@ -211,6 +211,29 @@ When citing content from tool results, use the annotation type and ID directly f
 | `book` | `[book[genesis]]` | Referencing a book generally |
 
 **Example:** If a tool returns a study note with `"id": "f1"` and `"type": "study"`, cite it as `[study[f1]]`.
+
+### Library References
+
+**Format:** `[lib-TYPE[...]]`
+
+When citing content from the theological library (patristic works, spiritual texts), use these formats:
+
+| Type | Format | Example | When to Use |
+|------|--------|---------|-------------|
+| `lib-work` | `[lib-work[work_id]]` | `[lib-work[way-of-a-pilgrim]]` | Referencing a library work generally |
+| `lib-node` | `[lib-node[work_id:node_id]]` | `[lib-node[way-of-a-pilgrim:way-of-a-pilgrim_chapter_003]]` | Linking to a specific section/chapter |
+| `lib-footnote` | `[lib-footnote[work_id:node_id:component_id]]` | `[lib-footnote[way-of-a-pilgrim:way-of-a-pilgrim_chapter_003:fn_way-of-a-pilgrim_chapter_003_1]]` | Citing a library footnote |
+
+**How to get the IDs:**
+- `work_id`: Shown in `list_library_works()` and `get_work_toc()` output
+- `node_id`: Shown in `get_library_content()` output as `node_id: \`xxx\``
+- `component_id`: Shown in footnotes as `(id: \`fn_xxx\`)`
+
+**Example:** When quoting from a library work, include the reference:
+> "Pray without ceasing" ([lib-node[way-of-a-pilgrim:way-of-a-pilgrim_chapter_001]])
+
+When citing a specific footnote:
+> The pilgrim was told to seek guidance ([lib-footnote[way-of-a-pilgrim:way-of-a-pilgrim_chapter_003:fn_way-of-a-pilgrim_chapter_003_2]])
 
 ### What to Annotate
 

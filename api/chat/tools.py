@@ -225,7 +225,7 @@ async def get_connections(passage_id: str) -> str:
     if lib_refs and lib_refs.library_refs:
         lines.append("**Library works citing this passage:**")
         for ref in lib_refs.library_refs:
-            author = ref.author.name if ref.author else "Unknown"
+            author = ref.author if ref.author else "Unknown"
             lines.append(f"- **{ref.work_title}** by {author}")
             if ref.node_title:
                 lines.append(f"  Chapter: {ref.node_title}")
@@ -328,7 +328,7 @@ async def list_library_works() -> str:
     used with get_work_toc or get_library_content.
 
     Returns:
-        List of available works with titles, authors, and IDs
+        List of available works with full metadata (type, era, reading level, etc.)
     """
     result = await library_service.get_works(limit=100)
 
@@ -342,15 +342,43 @@ async def list_library_works() -> str:
     ]
 
     for work in result.works:
-        author_str = ""
-        if work.authors:
-            names = [a.name for a in work.authors]
-            author_str = f" by {', '.join(names)}"
+        author_str = f" by {work.author}" if work.author and work.author != "Unknown" else ""
 
         lines.append(f"- **{work.title}**{author_str}")
+        if work.subtitle:
+            lines.append(f"  *{work.subtitle}*")
         lines.append(f"  ID: `{work.id}`")
-        if work.subjects:
-            lines.append(f"  Topics: {', '.join(work.subjects[:3])}")
+
+        # Metadata line: type | era | reading level
+        meta_parts = []
+        if work.work_type:
+            meta_parts.append(work.work_type.value)
+        if work.era:
+            meta_parts.append(work.era.value)
+        if work.reading_level:
+            meta_parts.append(f"level: {work.reading_level.value}")
+        if meta_parts:
+            lines.append(f"  [{' | '.join(meta_parts)}]")
+
+        # Description (truncated)
+        if work.description:
+            desc = work.description[:150] + "..." if len(work.description) > 150 else work.description
+            lines.append(f"  {desc}")
+
+        # Contributors (translators, editors)
+        if work.contributors:
+            contrib_strs = [f"{c.name} ({c.role.value})" for c in work.contributors[:2]]
+            lines.append(f"  Contributors: {', '.join(contrib_strs)}")
+
+        # Tags/topics
+        if work.tags:
+            lines.append(f"  Topics: {', '.join(work.tags[:4])}")
+
+        # Notes (edition caveats)
+        if work.notes:
+            notes = work.notes[:100] + "..." if len(work.notes) > 100 else work.notes
+            lines.append(f"  Note: {notes}")
+
         lines.append("")
 
     lines.append("*Use get_work_toc(work_id) to see the table of contents for any work.*")
@@ -369,20 +397,49 @@ async def get_work_toc(work_id: str) -> str:
         work_id: The work ID (e.g., 'on-acquisition-holy-spirit')
 
     Returns:
-        Table of contents with section titles and IDs for use with get_library_content
+        Table of contents with work metadata and section titles/IDs
     """
     toc = await library_service.get_work_toc(work_id)
     if not toc:
         return f"Work not found: {work_id}"
 
     work = await library_service.get_work(work_id)
-    work_title = work.title if work else work_id
 
-    lines = [
-        f"**{work_title}**",
-        "*Table of Contents*",
-        "",
-    ]
+    lines = []
+
+    if work:
+        # Work header with full metadata
+        lines.append(f"**{work.title}**")
+        if work.subtitle:
+            lines.append(f"*{work.subtitle}*")
+        if work.author and work.author != "Unknown":
+            lines.append(f"by {work.author}")
+
+        # Metadata line
+        meta_parts = []
+        if work.work_type:
+            meta_parts.append(work.work_type.value)
+        if work.era:
+            meta_parts.append(work.era.value)
+        if work.reading_level:
+            meta_parts.append(f"level: {work.reading_level.value}")
+        if meta_parts:
+            lines.append(f"[{' | '.join(meta_parts)}]")
+
+        if work.description:
+            lines.append("")
+            lines.append(work.description)
+
+        if work.notes:
+            lines.append(f"Note: {work.notes}")
+
+        lines.append("")
+        lines.append("---")
+    else:
+        lines.append(f"**{work_id}**")
+
+    lines.append("*Table of Contents*")
+    lines.append("")
 
     def render_toc(node, depth=0):
         indent = "  " * depth
@@ -426,6 +483,8 @@ async def get_library_content(work_id: str, node_id: str) -> str:
     lines = [f"**{work_title}**"]
     if hasattr(node, 'title') and node.title:
         lines.append(f"*{node.title}*")
+    # Include node_id for agent to use in [lib-node[node_id]] references
+    lines.append(f"node_id: `{node_id}`")
     lines.append("")
 
     # Content
@@ -434,14 +493,20 @@ async def get_library_content(work_id: str, node_id: str) -> str:
     else:
         lines.append("*This is a container node without content. Use get_work_toc to find readable sections.*")
 
-    # Components (footnotes, etc.)
+    # Components (footnotes, etc.) - include IDs so agent can cite them
     if hasattr(node, 'components') and node.components:
         comps = node.components
         if comps.footnotes:
             lines.append("")
             lines.append("**Footnotes:**")
             for fn in comps.footnotes:
-                lines.append(f"[{fn.marker}] {fn.content}")
+                # Include component ID so agent can reference with [lib-footnote[node_id:component_id]]
+                lines.append(f"[{fn.marker}] (id: `{fn.id}`) {fn.content}")
+        if comps.endnotes:
+            lines.append("")
+            lines.append("**Endnotes:**")
+            for en in comps.endnotes:
+                lines.append(f"[{en.marker}] (id: `{en.id}`) {en.content}")
 
     # Navigation
     if hasattr(node, 'navigation') and node.navigation:

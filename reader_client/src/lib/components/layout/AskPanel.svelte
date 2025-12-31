@@ -23,7 +23,7 @@
 	let messagesEl = $state<HTMLElement | undefined>(undefined);
 
 	// Context section collapsed state
-	let contextCollapsed = $state(false);
+	let contextCollapsed = $state(true);
 
 	// Derive context items from focusStack
 	let contextItems = $derived(studyContext.focusStack);
@@ -131,11 +131,6 @@
 	function handleNewConversation() {
 		chat.clearSession();
 	}
-
-	// Return to read mode
-	function handleClose() {
-		layout.setMode('read');
-	}
 </script>
 
 <div class="ask-panel">
@@ -149,13 +144,9 @@
 		<div class="header-right">
 			{#if chat.messages.length > 0}
 				<button class="header-btn" onclick={handleNewConversation} title="New conversation">
-					<Icon name="plus" size={16} />
 					<span class="btn-label">New</span>
 				</button>
 			{/if}
-			<button class="header-btn close-btn" onclick={handleClose} title="Return to reading">
-				<Icon name="x" size={18} />
-			</button>
 		</div>
 	</div>
 
@@ -251,7 +242,7 @@
 			bind:value={inputValue}
 			onkeydown={handleKeydown}
 			oninput={handleInput}
-			placeholder={hasContext ? 'Ask about your selected passages...' : 'Ask a question...'}
+			placeholder="Ask a question..."
 			rows="1"
 			class="ask-input font-ui"
 			disabled={chat.isStreaming}
@@ -322,12 +313,9 @@
 		background: var(--color-bg-hover);
 	}
 
-	.close-btn {
-		padding: var(--space-2);
-	}
-
 	.btn-label {
 		font-weight: var(--font-medium);
+		color: var(--color-text-primary);
 	}
 
 	/* Context Section */
@@ -598,10 +586,6 @@
 	@media (max-width: 768px) {
 		.ask-panel {
 			max-width: none;
-		}
-
-		.btn-label {
-			display: none;
 		}
 	}
 </style>

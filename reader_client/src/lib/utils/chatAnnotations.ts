@@ -25,13 +25,26 @@ export type ChatAnnotationType =
 	| 'variant'
 	| 'citation'
 	| 'article'
-	| 'book';
+	| 'book'
+	// Library reference types
+	| 'lib-work'
+	| 'lib-node'
+	| 'lib-footnote';
 
 export interface ScriptureRef {
 	bookId: string;
 	chapter: number;
 	verseStart: number | null;
 	verseEnd: number | null;
+}
+
+export interface LibraryRef {
+	/** For lib-work: the work_id. For lib-node/lib-footnote: extracted from node_id */
+	workId: string;
+	/** For lib-node and lib-footnote */
+	nodeId?: string;
+	/** For lib-footnote only */
+	componentId?: string;
 }
 
 export interface ChatAnnotation {
@@ -42,6 +55,8 @@ export interface ChatAnnotation {
 	end: number;
 	/** Parsed scripture reference (only for type='scripture') */
 	scriptureRef?: ScriptureRef;
+	/** Parsed library reference (only for lib-work, lib-node, lib-footnote) */
+	libraryRef?: LibraryRef;
 }
 
 /** A segment of parsed message content */
@@ -55,7 +70,9 @@ export type MessageSegment =
 
 // Note: The trailing \]? makes the second closing bracket optional to handle
 // edge cases where annotations may be formatted with single bracket (e.g., [SCRIPTURE[2maccabees:12:42-45]])
-const ANNOTATION_REGEX = /\[(SCRIPTURE|study|liturgical|variant|citation|article|book)\[([^\]]+)\]\]?/g;
+// Library types use hyphenated names: lib-work, lib-node, lib-footnote
+const ANNOTATION_REGEX =
+	/\[(SCRIPTURE|study|liturgical|variant|citation|article|book|lib-work|lib-node|lib-footnote)\[([^\]]+)\]\]?/g;
 
 // Label prefixes that the API may include before annotations (e.g., "[study note][study[f1]]")
 // These should be stripped out as they're redundant with our display text
@@ -98,10 +115,42 @@ export function parseAnnotations(text: string): ChatAnnotation[] {
 			annotation.scriptureRef = parseScriptureRef(value);
 		}
 
+		// Parse library references
+		if (annotationType === 'lib-work' || annotationType === 'lib-node' || annotationType === 'lib-footnote') {
+			annotation.libraryRef = parseLibraryRef(annotationType, value);
+		}
+
 		annotations.push(annotation);
 	}
 
 	return annotations;
+}
+
+/**
+ * Parse a library reference value.
+ * - lib-work: "way-of-a-pilgrim" → { workId: "way-of-a-pilgrim" }
+ * - lib-node: "work_id:node_id" → { workId, nodeId }
+ * - lib-footnote: "work_id:node_id:component_id" → { workId, nodeId, componentId }
+ */
+export function parseLibraryRef(type: ChatAnnotationType, value: string): LibraryRef {
+	if (type === 'lib-work') {
+		return { workId: value };
+	}
+
+	const parts = value.split(':');
+
+	if (type === 'lib-node' && parts.length >= 2) {
+		// Format: work_id:node_id
+		return { workId: parts[0], nodeId: parts[1] };
+	}
+
+	if (type === 'lib-footnote' && parts.length >= 3) {
+		// Format: work_id:node_id:component_id
+		return { workId: parts[0], nodeId: parts[1], componentId: parts[2] };
+	}
+
+	// Fallback for malformed refs
+	return { workId: value };
 }
 
 /**
@@ -306,9 +355,59 @@ export function getAnnotationDisplayText(annotation: ChatAnnotation): string {
 			return '[article]';
 		case 'book':
 			return getBookDisplayName(annotation.value);
+		// Library reference types
+		case 'lib-work':
+			return formatLibraryWorkDisplay(annotation.value);
+		case 'lib-node':
+			return formatLibraryNodeDisplay(annotation.value);
+		case 'lib-footnote':
+			return formatLibraryFootnoteDisplay(annotation.value);
 		default:
 			return annotation.value;
 	}
+}
+
+/**
+ * Format a library work ID for display.
+ * Converts slugs like "way-of-a-pilgrim" to "Way of a Pilgrim"
+ */
+function formatLibraryWorkDisplay(workId: string): string {
+	return workId
+		.split('-')
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(' ');
+}
+
+/**
+ * Format a library node reference for display.
+ * Value format: "work_id:node_id"
+ * Just show a simple label - node IDs are opaque.
+ */
+function formatLibraryNodeDisplay(value: string): string {
+	// Value is "work_id:node_id", show work title
+	const colonIndex = value.indexOf(':');
+	if (colonIndex !== -1) {
+		const workId = value.slice(0, colonIndex);
+		return formatLibraryWorkDisplay(workId);
+	}
+	return '[section]';
+}
+
+/**
+ * Format a library footnote reference for display.
+ * Value format: "work_id:node_id:component_id"
+ */
+function formatLibraryFootnoteDisplay(value: string): string {
+	const parts = value.split(':');
+	if (parts.length >= 3) {
+		const componentId = parts[2];
+		// Extract number from component ID like "fn_xxx_1"
+		const numMatch = componentId.match(/_(\d+)$/);
+		if (numMatch) {
+			return `Footnote ${numMatch[1]}`;
+		}
+	}
+	return '[footnote]';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
