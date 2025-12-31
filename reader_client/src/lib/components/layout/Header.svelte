@@ -285,17 +285,13 @@
 			padding: 0 var(--space-2);
 		}
 
-		.nav-label {
-			display: none;
-		}
-
 		.nav-buttons {
 			margin-left: var(--space-1);
 			padding-left: var(--space-1);
 		}
 
 		.nav-btn {
-			padding: var(--space-1);
+			padding: var(--space-1) var(--space-2);
 		}
 	}
 </style>
