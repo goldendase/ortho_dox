@@ -123,9 +123,9 @@
 	}
 
 	.article-body {
-		font-size: var(--font-sm);
+		font-size: var(--text-size, 1rem);
 		color: var(--color-text-secondary);
-		line-height: var(--leading-normal);
+		line-height: var(--leading-relaxed);
 		white-space: pre-wrap;
 		margin-top: var(--space-3);
 	}

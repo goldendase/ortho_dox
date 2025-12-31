@@ -586,14 +586,14 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--space-3);
-		font-size: var(--font-2xl);
+		font-size: calc(var(--text-size, 1rem) * 1.5);
 		font-weight: var(--font-medium);
 		color: var(--color-gold);
 		margin: 0 0 var(--space-2);
 	}
 
 	.page-description {
-		font-size: var(--font-base);
+		font-size: var(--text-size, 1rem);
 		color: var(--color-text-secondary);
 		margin: 0;
 	}
@@ -1043,7 +1043,7 @@
 		}
 
 		.page-title {
-			font-size: var(--font-xl);
+			font-size: calc(var(--text-size, 1rem) * 1.25);
 		}
 
 		.desktop-only {

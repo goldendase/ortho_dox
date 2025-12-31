@@ -375,17 +375,30 @@
 
 	/* Footnote markers - added via JS */
 	.content-body :global(.footnote-marker) {
-		display: inline;
-		font-size: 0.75em;
+		position: relative;
+		display: inline-block;
+		font-size: 0.8em;
+		font-weight: var(--font-semibold);
 		vertical-align: super;
 		color: var(--color-gold);
 		cursor: pointer;
-		padding: 0 2px;
-		transition: color var(--transition-fast);
+		padding: 0.1em 0.3em;
+		min-width: 1.2em;
+		text-align: center;
+		border-radius: var(--radius-sm);
+		transition: color var(--transition-fast), background var(--transition-fast);
+	}
+
+	/* Expanded touch target for footnotes */
+	.content-body :global(.footnote-marker::before) {
+		content: '';
+		position: absolute;
+		inset: -8px -4px;
 	}
 
 	.content-body :global(.footnote-marker:hover) {
 		color: var(--color-gold-bright);
+		background: var(--color-bg-hover);
 	}
 
 	/* Embedded images */

@@ -577,6 +577,7 @@
 	}
 
 	.note-text {
+		font-size: var(--text-size, 1rem);
 		line-height: var(--leading-relaxed);
 		white-space: pre-wrap;
 	}
@@ -643,6 +644,7 @@
 	}
 
 	.passage-preview {
+		font-size: var(--text-size, 1rem);
 		line-height: var(--leading-relaxed);
 	}
 

@@ -38,20 +38,30 @@
 
 <style>
 	.marker {
+		position: relative;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		font-family: var(--font-body);
 		font-size: var(--font-sm);
 		font-weight: var(--font-semibold);
-		min-width: 1.25em;
-		padding: 0 0.15em;
+		min-width: 1.5em;
+		min-height: 1.5em;
+		padding: 0.1em 0.25em;
 		vertical-align: super;
 		border-radius: var(--radius-sm);
 		transition:
 			background var(--transition-fast),
 			color var(--transition-fast);
 		cursor: pointer;
+	}
+
+	/* Expanded touch target - invisible but clickable */
+	.marker::before {
+		content: '';
+		position: absolute;
+		inset: -8px -6px;
+		/* Extends touch area by 8px top/bottom, 6px left/right */
 	}
 
 	.marker:hover {

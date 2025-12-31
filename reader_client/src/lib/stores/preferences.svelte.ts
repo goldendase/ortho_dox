@@ -32,10 +32,10 @@ export const TEXT_SIZES: TextSize[] = ['sm', 'md', 'lg', 'xl'];
 
 // Text size to CSS font-size mapping
 export const TEXT_SIZE_VALUES: Record<TextSize, string> = {
-	sm: '0.9rem',
-	md: '1rem',
-	lg: '1.15rem',
-	xl: '1.3rem'
+	sm: '1rem',
+	md: '1.125rem',
+	lg: '1.25rem',
+	xl: '1.4rem'
 };
 
 export const TEXT_SIZE_LABELS: Record<TextSize, string> = {

@@ -285,7 +285,7 @@
 	}
 
 	.work-title {
-		font-size: var(--font-lg);
+		font-size: var(--text-size, 1.125rem);
 		font-weight: var(--font-medium);
 		color: var(--color-text-primary);
 		line-height: var(--line-height-tight);
@@ -298,7 +298,7 @@
 	}
 
 	.work-subtitle {
-		font-size: var(--font-sm);
+		font-size: calc(var(--text-size, 1rem) * 0.9);
 		color: var(--color-text-secondary);
 		margin: 0;
 		line-height: var(--line-height-normal);
@@ -306,7 +306,7 @@
 	}
 
 	.work-author {
-		font-size: var(--font-sm);
+		font-size: calc(var(--text-size, 1rem) * 0.9);
 		color: var(--color-text-secondary);
 		margin: 0;
 		font-family: var(--font-ui);
@@ -335,14 +335,14 @@
 	}
 
 	.work-description {
-		font-size: var(--font-sm);
+		font-size: calc(var(--text-size, 1rem) * 0.9);
 		color: var(--color-text-secondary);
 		margin: 0;
 		line-height: var(--line-height-normal);
 	}
 
 	.work-notes {
-		font-size: var(--font-sm);
+		font-size: calc(var(--text-size, 1rem) * 0.9);
 		color: var(--color-text-muted);
 		margin: 0;
 		line-height: var(--line-height-normal);

@@ -72,6 +72,9 @@
 		</main>
 
 		{#if showStudyPanel}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="study-panel-backdrop" onclick={() => layout.closeStudyPanel()}></div>
 			<aside class="study-panel">
 				<StudyPanel />
 			</aside>
@@ -211,6 +214,15 @@
 		background: var(--color-bg-surface);
 		overflow-y: auto;
 		overflow-x: hidden;
+		z-index: 20;
+	}
+
+	/* Backdrop for closing study panel when clicking outside */
+	.study-panel-backdrop {
+		position: fixed;
+		inset: 0;
+		background: transparent;
+		z-index: 15;
 	}
 
 	/* Action bar spans full width */
@@ -227,7 +239,8 @@
 		}
 
 		.nav-drawer,
-		.study-panel {
+		.study-panel,
+		.study-panel-backdrop {
 			display: none;
 		}
 
