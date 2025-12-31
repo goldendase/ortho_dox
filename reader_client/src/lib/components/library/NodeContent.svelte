@@ -376,15 +376,13 @@
 	/* Footnote markers - added via JS */
 	.content-body :global(.footnote-marker) {
 		position: relative;
-		display: inline-block;
+		display: inline;
 		font-size: 0.8em;
 		font-weight: var(--font-semibold);
 		vertical-align: super;
 		color: var(--color-gold);
 		cursor: pointer;
-		padding: 0.1em 0.3em;
-		min-width: 1.2em;
-		text-align: center;
+		padding: 0.1em 0.4em;
 		border-radius: var(--radius-sm);
 		transition: color var(--transition-fast), background var(--transition-fast);
 	}
