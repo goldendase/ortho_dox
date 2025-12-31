@@ -48,7 +48,7 @@ MODELS: dict[str, ModelConfig] = {
     # Smart models
     "glm": ModelConfig(
         litellm_id="openrouter/z-ai/glm-4.7",
-        providers=["z-ai", "novita", "parasail"],
+        providers=["parasail", "novita", "z-ai"],
         temperature=0.6,
         max_tokens=16000,
     ),
