@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 	import type { PassageWithAnnotations, StudyNote, LiturgicalNote, VariantNote } from '$lib/api';
-	import { ui, favorites, reader } from '$lib/stores';
+	import { ui, favorites } from '$lib/stores';
 	import { studyContext, type FocusItem } from '$lib/stores/studyContext.svelte';
 	import { layout } from '$lib/stores/layout.svelte';
 	import { toast } from '$lib/stores/toast.svelte';
@@ -59,7 +59,7 @@
 	}
 
 	function handleToggleFavorite() {
-		const bookName = reader.position?.bookName ?? passage.book_id;
+		const bookName = studyContext.scripturePosition?.bookName ?? passage.book_id;
 		favorites.togglePassage({
 			book: passage.book_id,
 			bookName,
@@ -70,7 +70,7 @@
 	}
 
 	function handleToggleContext() {
-		const bookName = reader.position?.bookName ?? passage.book_id;
+		const bookName = studyContext.scripturePosition?.bookName ?? passage.book_id;
 
 		// Build focus item for this verse
 		const focusItem: FocusItem = {

@@ -8,7 +8,6 @@
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { reader } from '$lib/stores/reader.svelte';
 	import { studyContext } from '$lib/stores/studyContext.svelte';
 	import Chapter from '$lib/components/reader/Chapter.svelte';
 	import ChapterNav from '$lib/components/navigation/ChapterNav.svelte';
@@ -43,15 +42,6 @@
 			studyContext.setNavigation({
 				prev: navUrlToPath(data.chapter.navigation.prev_chapter),
 				next: navUrlToPath(data.chapter.navigation.next_chapter)
-			})
-		);
-
-		// Also update legacy reader store for existing components
-		untrack(() =>
-			reader.navigate({
-				book: data.chapter.book_id,
-				bookName: data.chapter.book_name,
-				chapter: data.chapter.chapter
 			})
 		);
 
@@ -91,24 +81,13 @@
 			);
 			if (verseEl) {
 				verseEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-				reader.scrollToVerse(parseInt(verseNum, 10));
+				studyContext.updateScroll({ verse: parseInt(verseNum, 10) });
 
 				// If 'select' param present, also select the verse for chat/focus context
 				if (selectParam) {
 					const verse = parseInt(selectParam, 10);
 					const passage = data.chapter.passages.find((p) => p.verse === verse);
 					if (passage) {
-						// Update legacy reader store
-						reader.selectVerse({
-							book: passage.book_id,
-							bookName: data.chapter.book_name,
-							chapter: passage.chapter,
-							verse: passage.verse,
-							passageId: passage.id,
-							text: passage.text.replace(/<[^>]*>/g, '').slice(0, 150)
-						});
-
-						// Also push to StudyContext focus stack
 						studyContext.pushFocus({
 							type: 'verse',
 							book: passage.book_id,

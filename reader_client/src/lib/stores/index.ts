@@ -25,20 +25,13 @@ export {
 	layout,
 	type AppMode,
 	type SheetState,
+	type DrawerTab,
 	type StudyPanelContent
 } from './layout.svelte';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy Stores (kept for compatibility during migration)
+// Legacy/Support Stores
 // ─────────────────────────────────────────────────────────────────────────────
-
-export {
-	reader,
-	formatPosition as formatReaderPosition,
-	positionToPath as readerPositionToPath,
-	type ReaderPosition,
-	type SelectedVerse
-} from './reader.svelte';
 
 export { ui, type SidePanelContent as LegacySidePanelContent, type SidePanelTab } from './ui.svelte';
 

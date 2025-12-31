@@ -23,10 +23,13 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** App modes - what's displayed in main area */
-export type AppMode = 'read' | 'search' | 'ask' | 'settings';
+export type AppMode = 'read' | 'search' | 'ask' | 'shelf';
 
 /** Mobile sheet states */
 export type SheetState = 'closed' | 'peek' | 'half' | 'full';
+
+/** Navigation drawer tab */
+export type DrawerTab = 'scripture' | 'library';
 
 /** Content that can be displayed in the study panel (read mode, right side) */
 export type StudyPanelContent =
@@ -56,6 +59,7 @@ class LayoutStore {
 
 	// Navigation drawer (read mode, desktop)
 	#drawerOpen = $state(false);
+	#drawerTab = $state<DrawerTab | null>(null); // null = auto (based on current reading)
 
 	// Study panel (read mode, right side)
 	#studyPanelContent = $state<StudyPanelContent | null>(null);
@@ -94,6 +98,10 @@ class LayoutStore {
 		return this.#drawerOpen;
 	}
 
+	get drawerTab() {
+		return this.#drawerTab;
+	}
+
 	get studyPanelContent() {
 		return this.#studyPanelContent;
 	}
@@ -126,7 +134,8 @@ class LayoutStore {
 	// Navigation Drawer Actions (Read Mode)
 	// ─────────────────────────────────────────────────────────────────────────
 
-	openDrawer(): void {
+	openDrawer(tab?: DrawerTab): void {
+		this.#drawerTab = tab ?? null;
 		if (this.#isMobile) {
 			this.#navSheetState = 'full';
 		} else {
@@ -140,6 +149,8 @@ class LayoutStore {
 		} else {
 			this.#drawerOpen = false;
 		}
+		// Reset tab override when closing
+		this.#drawerTab = null;
 	}
 
 	toggleDrawer(): void {

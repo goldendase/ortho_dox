@@ -11,7 +11,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { getAnnotation, ApiError } from '$lib/api';
-	import { ui, reader } from '$lib/stores';
+	import { ui } from '$lib/stores';
+	import { studyContext } from '$lib/stores/studyContext.svelte';
 	import type { ChatAnnotation } from '$lib/utils/chatAnnotations';
 	import { parseMarkdownWithAnnotations } from '$lib/utils/markdown';
 
@@ -38,7 +39,7 @@
 		const { bookId, chapter, verseStart } = ref;
 
 		// Check if we're already on this chapter
-		const currentPos = reader.position;
+		const currentPos = studyContext.scripturePosition;
 		const isSameChapter =
 			currentPos?.book === bookId && currentPos?.chapter === chapter;
 

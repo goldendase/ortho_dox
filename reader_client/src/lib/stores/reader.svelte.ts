@@ -32,7 +32,25 @@ export interface SelectedVerse {
 const STORAGE_KEY = 'orthodox_reader_position';
 const HISTORY_KEY = 'orthodox_reader_history';
 const SELECTED_VERSE_KEY = 'orthodox_reader_selected_verse';
+const BOOK_POSITIONS_KEY = 'orthodox_reader_book_positions';
 const MAX_HISTORY = 50;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-Book Position Tracking
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BookPosition {
+	// Navigation data
+	chapter: number;
+	verse?: number;
+	// Display metadata
+	bookName: string;
+	// Timestamp for sorting by recency
+	lastRead: number;
+}
+
+/** Map of bookId -> last reading position within that book */
+export type BookPositionsMap = Record<string, BookPosition>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State
@@ -68,6 +86,21 @@ function loadSelectedVerse(): SelectedVerse | null {
 	}
 }
 
+function loadBookPositions(): BookPositionsMap {
+	if (!browser) return {};
+	try {
+		const stored = localStorage.getItem(BOOK_POSITIONS_KEY);
+		return stored ? JSON.parse(stored) : {};
+	} catch {
+		return {};
+	}
+}
+
+function saveBookPositions(positions: BookPositionsMap): void {
+	if (!browser) return;
+	localStorage.setItem(BOOK_POSITIONS_KEY, JSON.stringify(positions));
+}
+
 function savePosition(pos: ReaderPosition | null): void {
 	if (!browser) return;
 	if (pos) {
@@ -99,6 +132,7 @@ class ReaderStore {
 	#position = $state<ReaderPosition | null>(loadPosition());
 	#history = $state<ReaderPosition[]>(loadHistory());
 	#selectedVerse = $state<SelectedVerse | null>(loadSelectedVerse());
+	#bookPositions = $state<BookPositionsMap>(loadBookPositions());
 
 	/** Current reading position */
 	get position() {
@@ -118,6 +152,11 @@ class ReaderStore {
 	/** History depth */
 	get historyLength() {
 		return this.#history.length;
+	}
+
+	/** Per-book reading positions (for resume reading UI) */
+	get bookPositions() {
+		return this.#bookPositions;
 	}
 
 	/**
@@ -145,6 +184,49 @@ class ReaderStore {
 
 		this.#position = pos;
 		savePosition(pos);
+
+		// Also update per-book position
+		this.#updateBookPosition(pos);
+	}
+
+	/**
+	 * Internal: update the per-book position map
+	 * NOTE: Only saves to localStorage, doesn't update reactive state to avoid
+	 * infinite loops when called from $effect (navigate is called from effects)
+	 */
+	#updateBookPosition(pos: ReaderPosition): void {
+		const bookPos: BookPosition = {
+			chapter: pos.chapter,
+			verse: pos.verse,
+			bookName: pos.bookName ?? pos.book,
+			lastRead: Date.now()
+		};
+
+		// Save directly to localStorage without updating reactive state
+		const positions = loadBookPositions();
+		positions[pos.book] = bookPos;
+		saveBookPositions(positions);
+	}
+
+	/**
+	 * Get saved position for a specific book (for resume navigation)
+	 * Reads directly from localStorage to get latest data
+	 */
+	getBookPosition(bookId: string): BookPosition | null {
+		const positions = loadBookPositions();
+		return positions[bookId] ?? null;
+	}
+
+	/**
+	 * Get all book positions sorted by most recently read
+	 * Reads directly from localStorage to get latest data
+	 */
+	getRecentBooks(limit = 10): Array<{ bookId: string } & BookPosition> {
+		const positions = loadBookPositions();
+		return Object.entries(positions)
+			.map(([bookId, pos]) => ({ bookId, ...pos }))
+			.sort((a, b) => b.lastRead - a.lastRead)
+			.slice(0, limit);
 	}
 
 	/**
@@ -195,10 +277,12 @@ class ReaderStore {
 		this.#position = null;
 		this.#history = [];
 		this.#selectedVerse = null;
+		this.#bookPositions = {};
 		if (browser) {
 			localStorage.removeItem(STORAGE_KEY);
 			localStorage.removeItem(HISTORY_KEY);
 			localStorage.removeItem(SELECTED_VERSE_KEY);
+			localStorage.removeItem(BOOK_POSITIONS_KEY);
 		}
 	}
 }
@@ -227,6 +311,17 @@ export function formatPosition(pos: ReaderPosition): string {
  */
 export function positionToPath(pos: ReaderPosition): string {
 	let path = `/read/${pos.book}/${pos.chapter}`;
+	if (pos.verse) {
+		path += `#v${pos.verse}`;
+	}
+	return path;
+}
+
+/**
+ * Build URL path from a saved book position (for resume reading)
+ */
+export function bookPositionToPath(bookId: string, pos: BookPosition): string {
+	let path = `/read/${bookId}/${pos.chapter}`;
 	if (pos.verse) {
 		path += `#v${pos.verse}`;
 	}

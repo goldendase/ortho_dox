@@ -4,19 +4,20 @@
   Master layout manager that renders different UIs based on app mode:
   - Read mode: Header + Drawer + Content + Study Panel + Action Bar
   - Search mode: Search UI + Action Bar
-  - Chat mode: Chat UI + Action Bar
-  - Settings mode: Settings UI + Action Bar
+  - Shelf mode: Reading history UI + Action Bar
+  - Ask mode: AI chat UI + Action Bar
 -->
 <script lang="ts">
 	import { page } from '$app/stores';
 	import { layout } from '$lib/stores/layout.svelte';
-	import { preferences, TEXT_SIZES, TEXT_SIZE_LABELS, type TextSize } from '$lib/stores/preferences.svelte';
+	import { preferences } from '$lib/stores/preferences.svelte';
 	import Header from './Header.svelte';
 	import ActionBar from './ActionBar.svelte';
 	import NavigationDrawer from './NavigationDrawer.svelte';
 	import StudyPanel from './StudyPanel.svelte';
 	import AskPanel from './AskPanel.svelte';
 	import SearchSurface from './SearchSurface.svelte';
+	import ShelfSurface from './ShelfSurface.svelte';
 	import Sheet from '$lib/components/ui/Sheet.svelte';
 	import type { Book } from '$lib/api';
 
@@ -29,9 +30,6 @@
 
 	// Check if on auth page (special layout)
 	let isAuthPage = $derived($page.url.pathname === '/auth');
-
-	// Check if in library mode (for drawer context)
-	let isLibraryMode = $derived($page.url.pathname.startsWith('/library/'));
 
 	// Should show study panel (read mode, desktop only, when has content)
 	let showStudyPanel = $derived(
@@ -56,11 +54,14 @@
 		class:has-study-panel={showStudyPanel}
 		style="--text-size: {preferences.textSizeCss}"
 	>
-		<Header {books} />
+		<Header />
 
 		{#if layout.drawerOpen && !layout.isMobile}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<div class="drawer-backdrop" onclick={() => layout.closeDrawer()}></div>
 			<aside class="nav-drawer">
-				<NavigationDrawer {books} {isLibraryMode} />
+				<NavigationDrawer {books} />
 			</aside>
 		{/if}
 
@@ -86,7 +87,7 @@
 			position="left"
 			onclose={() => layout.setNavSheetState('closed')}
 		>
-			<NavigationDrawer {books} {isLibraryMode} />
+			<NavigationDrawer {books} />
 		</Sheet>
 
 		<Sheet
@@ -104,37 +105,19 @@
 		</main>
 		<ActionBar />
 	</div>
+{:else if layout.mode === 'shelf'}
+	<!-- Shelf Mode -->
+	<div class="app-shell simple-layout" style="--text-size: {preferences.textSizeCss}">
+		<main class="app-main">
+			<ShelfSurface />
+		</main>
+		<ActionBar />
+	</div>
 {:else if layout.mode === 'ask'}
 	<!-- Ask Mode -->
 	<div class="app-shell simple-layout" style="--text-size: {preferences.textSizeCss}">
 		<main class="app-main">
 			<AskPanel />
-		</main>
-		<ActionBar />
-	</div>
-{:else if layout.mode === 'settings'}
-	<!-- Settings Mode -->
-	<div class="app-shell simple-layout">
-		<main class="app-main settings-content">
-			<div class="settings-panel">
-				<h1>Settings</h1>
-
-				<div class="setting-group">
-					<label class="setting-label">Font Size</label>
-					<div class="font-size-options">
-						{#each TEXT_SIZES as size}
-							<button
-								class="font-size-btn"
-								class:active={preferences.textSize === size}
-								onclick={() => preferences.setTextSize(size)}
-							>
-								{TEXT_SIZE_LABELS[size]}
-							</button>
-						{/each}
-					</div>
-					<p class="setting-hint">Adjusts text size for scripture and library reading.</p>
-				</div>
-			</div>
 		</main>
 		<ActionBar />
 	</div>
@@ -191,6 +174,15 @@
 		background: var(--color-bg-surface);
 		overflow-y: auto;
 		overflow-x: hidden;
+		z-index: 20;
+	}
+
+	/* Backdrop for closing drawer when clicking outside */
+	.drawer-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.3);
+		z-index: 10;
 	}
 
 	/* Main content area */
@@ -225,78 +217,6 @@
 	.app-shell > :global(.action-bar) {
 		grid-column: 1 / -1;
 		grid-row: -2 / -1;
-	}
-
-	/* Settings content */
-	.settings-content {
-		display: flex;
-		justify-content: center;
-		padding: var(--space-8) var(--space-4);
-		overflow-y: auto;
-	}
-
-	.settings-panel {
-		width: 100%;
-		max-width: 500px;
-	}
-
-	.settings-panel h1 {
-		font-size: var(--font-2xl);
-		font-weight: var(--font-medium);
-		color: var(--color-gold);
-		margin-bottom: var(--space-8);
-	}
-
-	.setting-group {
-		margin-bottom: var(--space-8);
-	}
-
-	.setting-label {
-		display: block;
-		font-family: var(--font-ui);
-		font-size: var(--font-sm);
-		font-weight: var(--font-semibold);
-		color: var(--color-text-secondary);
-		margin-bottom: var(--space-3);
-		text-transform: uppercase;
-		letter-spacing: var(--tracking-wide);
-	}
-
-	.font-size-options {
-		display: inline-flex;
-		gap: var(--space-2);
-		background: var(--color-bg-surface);
-		padding: var(--space-1);
-		border-radius: var(--radius-md);
-		border: 1px solid var(--color-border);
-	}
-
-	.font-size-btn {
-		padding: var(--space-2) var(--space-4);
-		border: none;
-		border-radius: var(--radius-sm);
-		background: transparent;
-		color: var(--color-text-secondary);
-		font-family: var(--font-ui);
-		font-size: var(--font-sm);
-		cursor: pointer;
-		transition: all var(--transition-fast);
-	}
-
-	.font-size-btn:hover {
-		color: var(--color-text-primary);
-	}
-
-	.font-size-btn.active {
-		background: var(--color-gold);
-		color: var(--color-bg-base);
-	}
-
-	.setting-hint {
-		margin-top: var(--space-3);
-		font-family: var(--font-ui);
-		font-size: var(--font-xs);
-		color: var(--color-text-muted);
 	}
 
 	/* Mobile adjustments */

@@ -12,6 +12,7 @@
 	import { goto, replaceState } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { preferences } from '$lib/stores';
+	import { libraryStore } from '$lib/stores/library.svelte';
 	import type { LibraryNodeNavigation } from '$lib/api';
 	import type { Snippet } from 'svelte';
 
@@ -158,6 +159,8 @@
 		});
 
 		// IntersectionObserver to track first visible paragraph
+		// Use the actual scrolling container (.reader-pane) as root, or null for viewport
+		const scrollRoot = containerEl?.closest('.reader-pane') as HTMLElement | null;
 		const visibleParagraphs = new Set<string>();
 		const observer = new IntersectionObserver(
 			(entries) => {
@@ -183,10 +186,12 @@
 						if (window.location.hash !== newHash) {
 							replaceState(newHash, {});
 						}
+						// Update store anchor (for resume reading)
+						libraryStore.setAnchor(newFirst);
 					}
 				}
 			},
-			{ root: containerEl, threshold: 0 }
+			{ root: scrollRoot, threshold: 0 }
 		);
 
 		// Observe all paragraphs after content renders

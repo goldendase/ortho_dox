@@ -2,25 +2,47 @@
   ActionBar Component
 
   Bottom mode selector:
-  - Read (scripture/library reading)
+  - Read (go to current reading position, or library if none)
   - Search
   - Ask (AI assistant)
   - Settings
 -->
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { layout } from '$lib/stores/layout.svelte';
+	import { studyContext, positionToPath } from '$lib/stores/studyContext.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
+
+	function handleRead() {
+		layout.setMode('read');
+		const pos = studyContext.position;
+		if (pos) {
+			goto(positionToPath(pos));
+		} else {
+			goto('/library');
+		}
+	}
 </script>
 
 <div class="action-bar">
 	<button
 		class="action-btn"
 		class:active={layout.mode === 'read'}
-		onclick={() => layout.setMode('read')}
+		onclick={handleRead}
 		aria-label="Read"
 	>
 		<Icon name="book-open" size={20} />
 		<span class="action-label">Read</span>
+	</button>
+
+	<button
+		class="action-btn"
+		class:active={layout.mode === 'shelf'}
+		onclick={() => layout.setMode('shelf')}
+		aria-label="Shelf"
+	>
+		<Icon name="shelf" size={20} />
+		<span class="action-label">Shelf</span>
 	</button>
 
 	<button
@@ -41,16 +63,6 @@
 	>
 		<Icon name="message-circle" size={20} />
 		<span class="action-label">Ask</span>
-	</button>
-
-	<button
-		class="action-btn"
-		class:active={layout.mode === 'settings'}
-		onclick={() => layout.setMode('settings')}
-		aria-label="Settings"
-	>
-		<Icon name="settings" size={20} />
-		<span class="action-label">Settings</span>
 	</button>
 </div>
 

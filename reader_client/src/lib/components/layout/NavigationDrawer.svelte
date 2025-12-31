@@ -2,9 +2,11 @@
   NavigationDrawer Component
 
   Left drawer containing:
-  - Mode switcher (Scripture / Library)
   - Tree navigation for Scripture (Testament → Book → Chapter)
   - Tree navigation for Library (recursive TOC)
+
+  Content is contextual based on studyContext.mode - shows the TOC
+  for whatever you're currently reading.
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
@@ -16,13 +18,20 @@
 
 	interface Props {
 		books?: Book[];
-		isLibraryMode?: boolean;
 	}
 
-	let { books = [], isLibraryMode = false }: Props = $props();
+	let { books = [] }: Props = $props();
 
-	// Active tab in drawer
-	let activeTab = $state<'scripture' | 'library'>(isLibraryMode ? 'library' : 'scripture');
+	// Determine which TOC to show:
+	// 1. If layout.drawerTab is set, use that (explicit override from header buttons)
+	// 2. Otherwise, auto-detect based on current reading mode
+	let showLibraryToc = $derived(() => {
+		// Explicit override from header buttons
+		if (layout.drawerTab === 'scripture') return false;
+		if (layout.drawerTab === 'library') return true;
+		// Auto-detect: show library TOC when reading library content and have TOC data
+		return studyContext.mode === 'library' && libraryStore.toc !== null;
+	});
 
 	// Expanded nodes tracking (works for both Scripture and Library)
 	// Keys: 'ot', 'nt', book IDs, or library node IDs
@@ -109,12 +118,6 @@
 		layout.closeDrawer();
 	}
 
-	// Navigate to library
-	function navigateToLibrary() {
-		goto('/library');
-		layout.closeDrawer();
-	}
-
 	// Navigate to library leaf node
 	function navigateToLibraryNode(node: TocNode) {
 		if (!libraryStore.currentWork) return;
@@ -138,29 +141,9 @@
 </script>
 
 <div class="nav-drawer">
-	<!-- Mode Tabs -->
-	<div class="mode-tabs">
-		<button
-			class="mode-tab"
-			class:active={activeTab === 'scripture'}
-			onclick={() => (activeTab = 'scripture')}
-		>
-			<Icon name="book-open" size={16} />
-			<span>Scripture</span>
-		</button>
-		<button
-			class="mode-tab"
-			class:active={activeTab === 'library'}
-			onclick={() => (activeTab = 'library')}
-		>
-			<Icon name="library" size={16} />
-			<span>Library</span>
-		</button>
-	</div>
-
-	<!-- Content based on active tab -->
+	<!-- Content based on current reading mode -->
 	<div class="drawer-content">
-		{#if activeTab === 'scripture'}
+		{#if !showLibraryToc()}
 			<!-- Scripture Tree -->
 			<div class="toc-tree">
 				<!-- Old Testament -->
@@ -256,28 +239,20 @@
 				{/if}
 			</div>
 		{:else}
-			<!-- Library Navigation -->
+			<!-- Library TOC -->
 			<div class="library-nav">
-				<button class="library-browse-btn" onclick={navigateToLibrary}>
-					<Icon name="grid" size={18} />
-					<span>Browse All Works</span>
-				</button>
+				<div class="current-work">
+					<h3 class="work-title">{libraryStore.currentWork?.title}</h3>
+					{#if libraryStore.currentWork?.author}
+						<p class="work-author">{libraryStore.currentWork.author}</p>
+					{/if}
 
-				<!-- Current work TOC (if in library) -->
-				{#if libraryStore.currentWork && libraryStore.toc}
-					<div class="current-work">
-						<h3 class="work-title">{libraryStore.currentWork.title}</h3>
-						{#if libraryStore.currentWork.author}
-							<p class="work-author">{libraryStore.currentWork.author}</p>
-						{/if}
-
-						<div class="toc-tree">
-							{#each libraryStore.toc.children ?? [] as node}
-								{@render libraryNode(node, 0)}
-							{/each}
-						</div>
+					<div class="toc-tree">
+						{#each libraryStore.toc?.children ?? [] as node}
+							{@render libraryNode(node, 0)}
+						{/each}
 					</div>
-				{/if}
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -323,39 +298,6 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-	}
-
-	.mode-tabs {
-		display: flex;
-		padding: var(--space-2);
-		gap: var(--space-2);
-		border-bottom: 1px solid var(--color-border);
-		background: var(--color-bg-elevated);
-	}
-
-	.mode-tab {
-		flex: 1;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: var(--space-2);
-		padding: var(--space-2) var(--space-3);
-		border-radius: var(--radius-md);
-		color: var(--color-text-secondary);
-		font-family: var(--font-ui);
-		font-size: var(--font-sm);
-		font-weight: var(--font-medium);
-		transition: all var(--transition-fast);
-	}
-
-	.mode-tab:hover {
-		background: var(--color-bg-hover);
-		color: var(--color-text-primary);
-	}
-
-	.mode-tab.active {
-		background: var(--color-gold-dim-bg);
-		color: var(--color-gold);
 	}
 
 	.drawer-content {
@@ -440,29 +382,8 @@
 	}
 
 	/* Library Navigation */
-	.library-browse-btn {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		width: 100%;
-		padding: var(--space-3);
-		border-radius: var(--radius-md);
-		background: var(--color-bg-elevated);
-		color: var(--color-text-primary);
-		font-family: var(--font-ui);
-		font-size: var(--font-sm);
-		font-weight: var(--font-medium);
-		transition: background var(--transition-fast);
-		margin-bottom: var(--space-4);
-	}
-
-	.library-browse-btn:hover {
-		background: var(--color-bg-hover);
-	}
-
 	.current-work {
-		border-top: 1px solid var(--color-border);
-		padding-top: var(--space-3);
+		/* No border/padding needed now that browse button is gone */
 	}
 
 	.work-title {

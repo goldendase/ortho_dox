@@ -9,7 +9,7 @@
 	import type { LibraryWorkSummary } from '$lib/api/types';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { getToc } from '$lib/api';
-	import { findFirstLeafNode } from '$lib/stores/library.svelte';
+	import { libraryStore, findFirstLeafNode, workPositionToPath } from '$lib/stores/library.svelte';
 
 	interface Props {
 		work: LibraryWorkSummary;
@@ -56,11 +56,23 @@
 	const workTypeLabel = $derived(workTypeLabels[work.work_type] || work.work_type);
 	const difficultyDots = $derived(readingLevelDots[work.reading_level] || 1);
 
-	// Find first leaf node for "Begin Reading" navigation
+	// Check for saved reading position (reads fresh from localStorage)
+	const savedPosition = $derived(libraryStore.getWorkPosition(work.id));
+	const hasProgress = $derived(!!savedPosition);
+
+	// Reading path: use saved position if available, otherwise load first leaf when expanded
 	let firstLeafPath = $state<string | null>(null);
 
+	// Compute reading path: prefer saved position, fall back to first leaf
+	const readingPath = $derived(
+		savedPosition
+			? workPositionToPath(work.id, savedPosition)
+			: firstLeafPath
+	);
+
+	// Load first leaf only when expanded and no saved position
 	$effect(() => {
-		if (expanded && !firstLeafPath) {
+		if (expanded && !savedPosition && !firstLeafPath) {
 			loadFirstLeaf();
 		}
 	});
@@ -178,10 +190,10 @@
 			<!-- Actions -->
 			<div class="card-actions">
 				<a
-					href={firstLeafPath || `/library/${work.id}`}
+					href={readingPath || `/library/${work.id}`}
 					class="begin-reading-btn"
 				>
-					Begin Reading
+					{hasProgress ? 'Continue Reading' : 'Begin Reading'}
 					<Icon name="arrow-right" size={16} />
 				</a>
 			</div>

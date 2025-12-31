@@ -11,7 +11,7 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { preferences, ui, reader, libraryStore } from '$lib/stores';
+	import { preferences, ui } from '$lib/stores';
 	import { getPassage } from '$lib/api';
 	import type { LibraryScriptureRefTarget } from '$lib/api';
 

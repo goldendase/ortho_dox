@@ -22,18 +22,15 @@
 
 	// Update stores when page data changes
 	$effect(() => {
-		// Update library store (for TOC in NavigationDrawer)
+		// Update library store (for TOC in NavigationDrawer and per-work position saving)
 		libraryStore.setWork(data.work);
 		libraryStore.setToc(data.toc);
 		libraryStore.setNode(data.node);
-		libraryStore.setPosition({
-			work: data.work.id,
-			workTitle: data.work.title,
-			node: data.node.id,
-			nodeTitle: getTocNodeTitle(data.node)
-		});
 
-		// Update study context (single source of truth)
+		// Save to per-work position storage for "Continue Reading" feature
+		libraryStore.saveWorkPosition();
+
+		// Update study context (single source of truth for current reading position)
 		const pos = {
 			type: 'library' as const,
 			workId: data.work.id,

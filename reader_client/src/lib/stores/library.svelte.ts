@@ -2,9 +2,12 @@
  * Library State Store
  *
  * Manages library-specific state:
- * - Current work and node
- * - TOC data
- * - Position persistence (paragraph anchors)
+ * - Current work, TOC, and node (for NavigationDrawer)
+ * - Per-work position tracking (for "Continue Reading" feature)
+ * - Paragraph selection (for chat context)
+ *
+ * NOTE: Current reading position is tracked by studyContext (single source of truth).
+ * This store handles library-specific UI state and per-work bookmarking.
  */
 
 import { browser } from '$app/environment';
@@ -30,31 +33,32 @@ export interface SelectedParagraph {
 	text: string; // First ~150 chars for context
 }
 
-const STORAGE_KEY = 'orthodox_library_position';
 const SELECTED_PARAGRAPH_KEY = 'orthodox_library_selected_paragraph';
+const WORK_POSITIONS_KEY = 'orthodox_library_work_positions';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-Work Position Tracking
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WorkPosition {
+	// Navigation data
+	node: string;
+	anchor?: string;
+	// Display metadata (for "resume reading" UI)
+	workTitle: string;
+	author: string;
+	nodeTitle?: string;
+	nodeLabel?: string;
+	// Timestamp for sorting by recency
+	lastRead: number;
+}
+
+/** Map of workId -> last reading position within that work */
+export type WorkPositionsMap = Record<string, WorkPosition>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistence
 // ─────────────────────────────────────────────────────────────────────────────
-
-function loadPosition(): LibraryPosition | null {
-	if (!browser) return null;
-	try {
-		const stored = localStorage.getItem(STORAGE_KEY);
-		return stored ? JSON.parse(stored) : null;
-	} catch {
-		return null;
-	}
-}
-
-function savePosition(pos: LibraryPosition | null): void {
-	if (!browser) return;
-	if (pos) {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(pos));
-	} else {
-		localStorage.removeItem(STORAGE_KEY);
-	}
-}
 
 function loadSelectedParagraph(): SelectedParagraph | null {
 	if (!browser) return null;
@@ -64,6 +68,21 @@ function loadSelectedParagraph(): SelectedParagraph | null {
 	} catch {
 		return null;
 	}
+}
+
+function loadWorkPositions(): WorkPositionsMap {
+	if (!browser) return {};
+	try {
+		const stored = localStorage.getItem(WORK_POSITIONS_KEY);
+		return stored ? JSON.parse(stored) : {};
+	} catch {
+		return {};
+	}
+}
+
+function saveWorkPositions(positions: WorkPositionsMap): void {
+	if (!browser) return;
+	localStorage.setItem(WORK_POSITIONS_KEY, JSON.stringify(positions));
 }
 
 function saveSelectedParagraph(para: SelectedParagraph | null): void {
@@ -80,11 +99,17 @@ function saveSelectedParagraph(para: SelectedParagraph | null): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class LibraryStore {
-	#position = $state<LibraryPosition | null>(loadPosition());
+	// Runtime state for TOC/reader display
 	#currentWork = $state<LibraryWorkDetail | null>(null);
 	#toc = $state<TocNode | null>(null);
 	#currentNode = $state<LibraryNodeLeaf | null>(null);
+	#currentAnchor = $state<string | undefined>(undefined);
+
+	// Chat context selection
 	#selectedParagraph = $state<SelectedParagraph | null>(loadSelectedParagraph());
+
+	// Per-work position tracking (for "Continue Reading" feature)
+	#workPositions = $state<WorkPositionsMap>(loadWorkPositions());
 
 	// TOC drawer state
 	#tocOpen = $state(false);
@@ -93,8 +118,16 @@ class LibraryStore {
 	// Getters
 	// ─────────────────────────────────────────────────────────────────────────
 
-	get position() {
-		return this.#position;
+	/** Current work/node as a position object (derived, for compatibility) */
+	get position(): LibraryPosition | null {
+		if (!this.#currentWork || !this.#currentNode) return null;
+		return {
+			work: this.#currentWork.id,
+			workTitle: this.#currentWork.title,
+			node: this.#currentNode.id,
+			nodeTitle: this.#currentNode.title,
+			anchor: this.#currentAnchor
+		};
 	}
 
 	get currentWork() {
@@ -118,28 +151,76 @@ class LibraryStore {
 		return this.#selectedParagraph;
 	}
 
+	/** Per-work reading positions (for resume reading UI) */
+	get workPositions() {
+		return this.#workPositions;
+	}
+
 	// ─────────────────────────────────────────────────────────────────────────
 	// Navigation
 	// ─────────────────────────────────────────────────────────────────────────
 
 	/**
-	 * Set current position (called when navigating to a library page)
-	 * NOTE: Cannot clear selectedParagraph here - causes infinite loops
-	 * because this is called from $effect. Display layer filters stale selections.
+	 * Update anchor (called when scrolling)
+	 * Also saves to per-work position for resume reading feature
 	 */
-	setPosition(pos: LibraryPosition): void {
-		this.#position = pos;
-		savePosition(pos);
+	setAnchor(anchor: string): void {
+		this.#currentAnchor = anchor;
+		this.#saveWorkPositionToStorage();
 	}
 
 	/**
-	 * Update anchor in current position (called when scrolling)
+	 * Internal: save current position to per-work storage
+	 * Uses currentWork/currentNode state
 	 */
-	setAnchor(anchor: string): void {
-		if (this.#position) {
-			this.#position = { ...this.#position, anchor };
-			savePosition(this.#position);
-		}
+	#saveWorkPositionToStorage(): void {
+		if (!this.#currentWork || !this.#currentNode) return;
+
+		const workPos: WorkPosition = {
+			node: this.#currentNode.id,
+			anchor: this.#currentAnchor,
+			workTitle: this.#currentWork.title,
+			author: this.#currentWork.author,
+			nodeTitle: this.#currentNode.title,
+			nodeLabel: this.#currentNode.label,
+			lastRead: Date.now()
+		};
+
+		const positions = loadWorkPositions();
+		positions[this.#currentWork.id] = workPos;
+		saveWorkPositions(positions);
+	}
+
+	/**
+	 * Save current position to per-work storage (for resume reading)
+	 * Call this AFTER setting work and node - uses queueMicrotask
+	 * to escape reactive context and avoid infinite loops
+	 */
+	saveWorkPosition(): void {
+		queueMicrotask(() => {
+			this.#saveWorkPositionToStorage();
+		});
+	}
+
+	/**
+	 * Get saved position for a specific work (for resume navigation)
+	 * Reads directly from localStorage to get latest data
+	 */
+	getWorkPosition(workId: string): WorkPosition | null {
+		const positions = loadWorkPositions();
+		return positions[workId] ?? null;
+	}
+
+	/**
+	 * Get all work positions sorted by most recently read
+	 * Reads directly from localStorage to get latest data
+	 */
+	getRecentWorks(limit = 10): Array<{ workId: string } & WorkPosition> {
+		const positions = loadWorkPositions();
+		return Object.entries(positions)
+			.map(([workId, pos]) => ({ workId, ...pos }))
+			.sort((a, b) => b.lastRead - a.lastRead)
+			.slice(0, limit);
 	}
 
 	/**
@@ -158,9 +239,11 @@ class LibraryStore {
 
 	/**
 	 * Set current node content (from page load)
+	 * Resets anchor since we're on a new node
 	 */
 	setNode(node: LibraryNodeLeaf): void {
 		this.#currentNode = node;
+		this.#currentAnchor = undefined;
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────
@@ -204,25 +287,27 @@ class LibraryStore {
 	// ─────────────────────────────────────────────────────────────────────────
 
 	reset(): void {
-		this.#position = null;
 		this.#currentWork = null;
 		this.#toc = null;
 		this.#currentNode = null;
+		this.#currentAnchor = undefined;
 		this.#selectedParagraph = null;
+		this.#workPositions = {};
 		this.#tocOpen = false;
 		if (browser) {
-			localStorage.removeItem(STORAGE_KEY);
 			localStorage.removeItem(SELECTED_PARAGRAPH_KEY);
+			localStorage.removeItem(WORK_POSITIONS_KEY);
 		}
 	}
 
 	/**
-	 * Clear runtime state but keep position (for navigating away)
+	 * Clear runtime state (for navigating away from library)
 	 */
 	clearRuntimeState(): void {
 		this.#currentWork = null;
 		this.#toc = null;
 		this.#currentNode = null;
+		this.#currentAnchor = undefined;
 		this.#tocOpen = false;
 	}
 }
@@ -255,6 +340,14 @@ export function formatLibraryPosition(pos: LibraryPosition): string {
  */
 export function libraryPositionToPath(pos: LibraryPosition): string {
 	const base = `/library/${pos.work}/${pos.node}`;
+	return pos.anchor ? `${base}#${pos.anchor}` : base;
+}
+
+/**
+ * Build URL path from a saved work position (for resume reading)
+ */
+export function workPositionToPath(workId: string, pos: WorkPosition): string {
+	const base = `/library/${workId}/${pos.node}`;
 	return pos.anchor ? `${base}#${pos.anchor}` : base;
 }
 
