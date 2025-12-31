@@ -217,10 +217,11 @@
 		</button>
 	</div>
 
-	<!-- Desktop Filters -->
-	<div class="filters desktop-only">
-		<!-- Era filter (dropdown) -->
-		<div class="filter-group filter-dropdown">
+	<!-- Desktop Filters + Search Row -->
+	<div class="filter-bar desktop-only">
+		<div class="filters">
+			<!-- Era filter (dropdown) -->
+			<div class="filter-group filter-dropdown">
 			<span class="filter-label">Era</span>
 			<div class="dropdown-wrapper">
 				<button
@@ -413,17 +414,16 @@
 			</div>
 		</div>
 
-		<!-- Clear all -->
-		{#if hasActiveFilters}
-			<button class="clear-filters-btn" onclick={clearAllFilters}>
-				<Icon name="x" size={14} />
-				Clear filters
-			</button>
-		{/if}
-	</div>
+			<!-- Clear all -->
+			{#if hasActiveFilters}
+				<button class="clear-filters-btn" onclick={clearAllFilters}>
+					<Icon name="x" size={14} />
+					Clear filters
+				</button>
+			{/if}
+		</div>
 
-	<!-- Search Bar -->
-	<div class="search-row">
+		<!-- Search (right side) -->
 		<div class="search-wrapper">
 			<Icon name="search" size={16} />
 			<input
@@ -636,9 +636,23 @@
 		margin-left: var(--space-1);
 	}
 
-	/* Search Row - Below Filters */
-	.search-row {
+	/* Filter Bar - Contains filters + search */
+	.filter-bar {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--space-4);
 		margin-bottom: var(--space-4);
+		padding-bottom: var(--space-4);
+		border-bottom: 1px solid var(--color-border);
+		flex-wrap: wrap;
+	}
+
+	/* Filters - Grouped together */
+	.filters {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--space-4);
+		flex-wrap: wrap;
 	}
 
 	.search-wrapper {
@@ -650,8 +664,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		transition: border-color var(--transition-fast);
-		min-width: 280px;
-		max-width: 400px;
+		min-width: 200px;
 	}
 
 	.search-wrapper:focus-within {
@@ -666,7 +679,7 @@
 		font-family: var(--font-ui);
 		color: var(--color-text-primary);
 		outline: none;
-		min-width: 180px;
+		min-width: 140px;
 	}
 
 	.search-input::placeholder {
@@ -685,17 +698,6 @@
 	.clear-search:hover {
 		color: var(--color-text-primary);
 		background: var(--color-bg-hover);
-	}
-
-	/* Filters - Nice Grid Layout */
-	.filters {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, auto));
-		gap: var(--space-4) var(--space-6);
-		align-items: start;
-		margin-bottom: var(--space-4);
-		padding-bottom: var(--space-4);
-		border-bottom: 1px solid var(--color-border);
 	}
 
 	.filter-group {
@@ -874,7 +876,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		cursor: pointer;
-		align-self: flex-end;
+		height: fit-content;
 	}
 
 	.clear-filters-btn:hover {
@@ -1052,14 +1054,9 @@
 			display: block;
 		}
 
-		.search-wrapper {
-			width: 100%;
-			max-width: none;
-			min-width: 0;
-		}
-
 		.works-grid {
 			grid-template-columns: 1fr;
 		}
 	}
+
 </style>
