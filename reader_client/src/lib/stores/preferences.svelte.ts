@@ -4,6 +4,7 @@
  * Manages user preferences that persist to localStorage:
  * - Text size for library reader
  * - Scripture reference click behavior
+ * - Chat model selection (experimental)
  */
 
 import { browser } from '$app/environment';
@@ -15,17 +16,35 @@ import { browser } from '$app/environment';
 export type TextSize = 'sm' | 'md' | 'lg' | 'xl';
 export type ScriptureRefBehavior = 'preview' | 'navigate';
 
+/** Available chat models - null means use server default (GLM) */
+export type ChatModel = 'glm' | 'grok' | 'kimi' | 'gemini-flash' | 'gemini-pro' | null;
+
 export interface Preferences {
 	textSize: TextSize;
 	scriptureRefBehavior: ScriptureRefBehavior;
+	chatModel: ChatModel;
 }
 
 const STORAGE_KEY = 'orthodox_preferences';
 
 const DEFAULT_PREFERENCES: Preferences = {
 	textSize: 'md',
-	scriptureRefBehavior: 'preview'
+	scriptureRefBehavior: 'preview',
+	chatModel: null
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat Model Options
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const CHAT_MODELS: { value: ChatModel; label: string }[] = [
+	{ value: null, label: 'Server Default' },
+	{ value: 'glm', label: 'GLM 4.7' },
+	{ value: 'grok', label: 'Grok 4.1 Fast' },
+	{ value: 'kimi', label: 'Kimi K2 Thinking' },
+	{ value: 'gemini-flash', label: 'Gemini 3 Flash' },
+	{ value: 'gemini-pro', label: 'Gemini 3 Pro' }
+];
 
 // Text sizes array for iteration
 export const TEXT_SIZES: TextSize[] = ['sm', 'md', 'lg', 'xl'];
@@ -136,6 +155,19 @@ class PreferencesStore {
 		this.setScriptureRefBehavior(
 			this.#prefs.scriptureRefBehavior === 'preview' ? 'navigate' : 'preview'
 		);
+	}
+
+	// ─────────────────────────────────────────────────────────────────────────
+	// Chat Model (Experimental)
+	// ─────────────────────────────────────────────────────────────────────────
+
+	get chatModel() {
+		return this.#prefs.chatModel;
+	}
+
+	setChatModel(model: ChatModel): void {
+		this.#prefs = { ...this.#prefs, chatModel: model };
+		savePreferences(this.#prefs);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@
 	import { studyContext, formatFocusItem, type FocusItem } from '$lib/stores/studyContext.svelte';
 	import Icon, { type IconName } from '$lib/components/ui/Icon.svelte';
 	import ChatMessage from '$lib/components/chat/ChatMessage.svelte';
+	import ChatSettingsSheet from './ChatSettingsSheet.svelte';
 
 	// Chat input state
 	let inputValue = $state('');
@@ -25,6 +26,9 @@
 
 	// Context section collapsed state
 	let contextCollapsed = $state(true);
+
+	// Settings sheet state
+	let settingsOpen = $state(false);
 
 	// Track if user is near bottom (for smart auto-scroll)
 	let isNearBottom = $state(true);
@@ -121,7 +125,6 @@
 		const message = inputValue.trim();
 		if (!message || chat.isStreaming || isSubmitting) return;
 
-		// Guard against double submission
 		isSubmitting = true;
 		inputValue = '';
 
@@ -168,6 +171,14 @@
 	function handleNewConversation() {
 		chat.clearSession();
 	}
+
+	function handleStopStream() {
+		chat.cancelStream();
+	}
+
+	function handleDeleteMessage(messageId: string) {
+		chat.deleteMessage(messageId);
+	}
 </script>
 
 <div class="ask-panel">
@@ -184,6 +195,9 @@
 					<span class="btn-label">New</span>
 				</button>
 			{/if}
+			<button class="header-btn" onclick={() => settingsOpen = true} title="Chat settings">
+				<Icon name="settings" size={16} />
+			</button>
 		</div>
 	</div>
 
@@ -274,7 +288,17 @@
 						{/if}
 					</div>
 				{/if}
-				<ChatMessage {message} />
+				<div class="message-wrapper">
+					<ChatMessage {message} />
+					<button
+						class="message-delete"
+						onclick={() => handleDeleteMessage(message.id)}
+						aria-label="Delete message"
+						title="Delete message"
+					>
+						<Icon name="trash" size={14} />
+					</button>
+				</div>
 			{/each}
 
 			{#if chat.isStreaming}
@@ -354,16 +378,30 @@
 			class="ask-input font-ui"
 			disabled={chat.isStreaming}
 		></textarea>
-		<button
-			type="submit"
-			class="send-button touch-target"
-			disabled={!inputValue.trim() || chat.isStreaming}
-			aria-label="Send message"
-		>
-			<Icon name="send" size={18} />
-		</button>
+		{#if chat.isStreaming}
+			<button
+				type="button"
+				class="stop-button touch-target"
+				onclick={handleStopStream}
+				aria-label="Stop generating"
+			>
+				<Icon name="stop" size={18} />
+			</button>
+		{:else}
+			<button
+				type="submit"
+				class="send-button touch-target"
+				disabled={!inputValue.trim()}
+				aria-label="Send message"
+			>
+				<Icon name="send" size={18} />
+			</button>
+		{/if}
 	</form>
 </div>
+
+<!-- Settings Sheet -->
+<ChatSettingsSheet bind:open={settingsOpen} />
 
 <style>
 	.ask-panel {
@@ -555,6 +593,32 @@
 		flex-direction: column;
 		gap: 0;
 		min-height: 0;
+	}
+
+	/* Message wrapper with delete button */
+	.message-wrapper {
+		position: relative;
+	}
+
+	.message-delete {
+		position: absolute;
+		top: var(--space-2);
+		right: var(--space-1);
+		padding: var(--space-1);
+		color: var(--color-text-muted);
+		border-radius: var(--radius-sm);
+		opacity: 0;
+		transition: opacity var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+	}
+
+	.message-wrapper:hover .message-delete {
+		opacity: 0.6;
+	}
+
+	.message-delete:hover {
+		opacity: 1 !important;
+		color: var(--color-error);
+		background: rgba(204, 68, 68, 0.1);
 	}
 
 	.ask-empty-state {
@@ -761,15 +825,19 @@
 		cursor: not-allowed;
 	}
 
-	.send-button {
+	.send-button,
+	.stop-button {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: var(--space-3);
-		background: var(--color-gold);
-		color: var(--color-bg-base);
 		border-radius: var(--radius-md);
 		transition: background var(--transition-fast), opacity var(--transition-fast);
+	}
+
+	.send-button {
+		background: var(--color-gold);
+		color: var(--color-bg-base);
 	}
 
 	.send-button:hover:not(:disabled) {
@@ -779,6 +847,15 @@
 	.send-button:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.stop-button {
+		background: var(--color-error, #cc4444);
+		color: var(--color-bg-base);
+	}
+
+	.stop-button:hover {
+		background: #b83c3c;
 	}
 
 	@media (max-width: 768px) {

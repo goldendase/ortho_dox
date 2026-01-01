@@ -394,6 +394,8 @@ export interface ChatContext {
 export interface ChatRequest {
 	messages: ChatMessage[];
 	context: ChatContext | null;
+	/** Model to use: glm (default), grok, kimi, gemini-flash, gemini-pro */
+	model?: string | null;
 }
 
 export interface ChatToolCall {

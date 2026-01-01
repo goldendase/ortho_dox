@@ -11,7 +11,8 @@
 
 import { browser } from '$app/environment';
 import { studyContext, type FocusItem } from './studyContext.svelte';
-import { sendChatMessageStream } from '$lib/api';
+import { preferences } from './preferences.svelte';
+import { sendChatMessageStream, cancelChatStream, type StreamHandle } from '$lib/api';
 import type { ChatContext as ApiChatContext, ChatMessage as ApiChatMessage } from '$lib/api';
 import { DspyStreamParser, type ParsedStreamState } from '$lib/utils/dspyStreamParser';
 
@@ -128,8 +129,8 @@ class ChatStore {
 	/** Error message if last request failed */
 	error = $state<string | null>(null);
 
-	/** AbortController for cancelling stream */
-	#streamController: AbortController | null = null;
+	/** Stream handle for cancelling (includes controller and stream ID) */
+	#streamHandle: StreamHandle | null = null;
 
 	/** DSPy stream parser instance */
 	#streamParser: DspyStreamParser | null = null;
@@ -356,7 +357,7 @@ class ChatStore {
 		});
 
 		try {
-			this.#streamController = await sendChatMessageStream(
+			this.#streamHandle = await sendChatMessageStream(
 				this.#conversationHistory,
 				this.currentContext,
 				{
@@ -386,17 +387,18 @@ class ChatStore {
 						this.#resetThinkingState();
 						this.#addAssistantMessage(parsedAnswer);
 						this.isStreaming = false;
-						this.#streamController = null;
+						this.#streamHandle = null;
 						this.#streamParser = null;
 					},
 					onError: (error) => {
 						this.error = error;
 						this.isStreaming = false;
 						this.streamingContent = '';
-						this.#streamController = null;
+						this.#streamHandle = null;
 						this.#streamParser = null;
 					}
-				}
+				},
+				preferences.chatModel
 			);
 		} catch (err) {
 			this.error = err instanceof Error ? err.message : 'Failed to send message';
@@ -408,11 +410,20 @@ class ChatStore {
 
 	/**
 	 * Cancel the current streaming request
+	 *
+	 * Aborts the client-side fetch AND notifies the backend to stop generation.
 	 */
 	cancelStream(): void {
-		if (this.#streamController) {
-			this.#streamController.abort();
-			this.#streamController = null;
+		if (this.#streamHandle) {
+			// Abort client-side immediately for responsiveness
+			this.#streamHandle.controller.abort();
+
+			// Notify backend to stop generation (fire and forget)
+			if (this.#streamHandle.streamId) {
+				cancelChatStream(this.#streamHandle.streamId);
+			}
+
+			this.#streamHandle = null;
 			this.isStreaming = false;
 			this.streamingContent = '';
 			this.#resetThinkingState();
@@ -425,6 +436,57 @@ class ChatStore {
 	 */
 	toggleThinkingExpanded(): void {
 		this.thinkingExpanded = !this.thinkingExpanded;
+	}
+
+	/**
+	 * Delete a message from the conversation
+	 *
+	 * Removes from both UI messages and API history.
+	 * If deleting a user message, also deletes the following assistant response (if any).
+	 */
+	deleteMessage(messageId: string): void {
+		const messageIndex = this.messages.findIndex((m) => m.id === messageId);
+		if (messageIndex === -1) return;
+
+		const message = this.messages[messageIndex];
+
+		if (message.role === 'user') {
+			// Find the corresponding assistant message (if it exists, it's the next one)
+			const nextMessage = this.messages[messageIndex + 1];
+			const deleteCount = nextMessage?.role === 'assistant' ? 2 : 1;
+
+			// Remove from UI messages
+			this.messages = [
+				...this.messages.slice(0, messageIndex),
+				...this.messages.slice(messageIndex + deleteCount)
+			];
+
+			// Remove from API history (same indices apply)
+			this.#conversationHistory = [
+				...this.#conversationHistory.slice(0, messageIndex),
+				...this.#conversationHistory.slice(messageIndex + deleteCount)
+			];
+		} else {
+			// Deleting an assistant message - just remove it and the preceding user message
+			const deleteStart = messageIndex > 0 && this.messages[messageIndex - 1].role === 'user'
+				? messageIndex - 1
+				: messageIndex;
+			const deleteCount = deleteStart === messageIndex - 1 ? 2 : 1;
+
+			this.messages = [
+				...this.messages.slice(0, deleteStart),
+				...this.messages.slice(deleteStart + deleteCount)
+			];
+
+			this.#conversationHistory = [
+				...this.#conversationHistory.slice(0, deleteStart),
+				...this.#conversationHistory.slice(deleteStart + deleteCount)
+			];
+		}
+
+		// Persist changes
+		saveMessages(this.messages);
+		saveHistory(this.#conversationHistory);
 	}
 
 	// ─────────────────────────────────────────────────────────────────────────

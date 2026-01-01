@@ -215,6 +215,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="Current reading context - passage or chapter the user is viewing.",
     )
+    model: str | None = Field(
+        default=None,
+        description="Model to use: glm (default), grok, kimi, gemini-flash, gemini-pro. If absent, uses glm.",
+    )
 
 
 class ChatResponse(BaseModel):

@@ -36,26 +36,42 @@ class ModelConfig:
 
 # Model registry
 MODELS: dict[str, ModelConfig] = {
-    # Fast model
-    "gemini-flash": ModelConfig(
-        litellm_id="openrouter/google/gemini-3-flash-preview",
-        providers=["google-vertex", "google-ai-studio"],
-        temperature=0.6,
-        max_tokens=8192,
-        is_gemini=True,
-    ),
-
-    # Smart models
+    # Default / King
     "glm": ModelConfig(
         litellm_id="openrouter/z-ai/glm-4.7",
         providers=["parasail", "novita", "z-ai"],
         temperature=0.6,
         max_tokens=16000,
     ),
+
+    # Fast models
+    "grok": ModelConfig(
+        litellm_id="openrouter/x-ai/grok-4.1-fast",
+        providers=["xai"],
+        temperature=0.3,
+        max_tokens=8192,
+    ),
+    "gemini-flash": ModelConfig(
+        litellm_id="openrouter/google/gemini-3-flash-preview",
+        providers=["google-vertex", "google-ai-studio"],
+        temperature=0.7,
+        max_tokens=8192,
+        is_gemini=True,
+    ),
+
+    # Thinking models
+    "kimi": ModelConfig(
+        litellm_id="openrouter/moonshotai/kimi-k2-thinking",
+        providers=["google-vertex", "parasail"],
+        temperature=0.6,
+        max_tokens=16000,
+    ),
+
+    # Other smart models
     "gemini-pro": ModelConfig(
         litellm_id="openrouter/google/gemini-3-pro-preview",
         providers=["google-vertex", "google-ai-studio"],
-        temperature=0.8,
+        temperature=0.7,
         max_tokens=8192,
         is_gemini=True,
     ),
@@ -64,12 +80,6 @@ MODELS: dict[str, ModelConfig] = {
         providers=["cerebras", "google-vertex"],
         temperature=0.7,
         max_tokens=16000,
-    ),
-    "grok-fast": ModelConfig(
-        litellm_id="openrouter/x-ai/grok-4.1-fast",
-        providers=["xai"],
-        temperature=0.3,
-        max_tokens=8192,
     ),
 
     # Vision models
@@ -195,10 +205,10 @@ def get_vision_lm() -> dspy.LM:
 
 
 def configure_chat_lm(model: str = "glm") -> dspy.LM:
-    """Configure DSPy for chat with native tool calling.
+    """Configure DSPy for chat with text-based tool calling.
 
-    Sets up both the LM and the ChatAdapter with native function calling enabled.
-    This configuration is required for ReAct-based agents with tool access.
+    Sets up both the LM and the ChatAdapter. Native function calling is disabled
+    because GLM doesn't support it and DSPy ReAct uses text-based tool calling anyway.
 
     Args:
         model: Model name from MODELS registry, or raw litellm model ID
@@ -207,6 +217,6 @@ def configure_chat_lm(model: str = "glm") -> dspy.LM:
         The configured LM (also set globally via dspy.configure)
     """
     lm = get_lm(model)
-    adapter = dspy.ChatAdapter(use_native_function_calling=True)
+    adapter = dspy.ChatAdapter(use_native_function_calling=False)
     dspy.configure(lm=lm, adapter=adapter)
     return lm

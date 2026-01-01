@@ -1,9 +1,8 @@
 """Chat endpoint for OSB agent conversations."""
 
-import json
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from api.models.chat import ChatRequest, ChatResponse
 from api.services import chat_service
@@ -44,6 +43,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     return await chat_service.process_chat(
         messages=request.messages,
         context=request.context,
+        model=request.model,
     )
 
 
@@ -56,19 +56,20 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     The frontend receives events as they happen:
 
     **Event types:**
-    - `status`: Tool execution status (e.g., "Searching library...")
-    - `chunk`: Partial answer text (token-by-token streaming)
+    - `chunk`: Raw DSPy output including markers like [[ ## next_thought ## ]]
     - `done`: Final complete response with answer and tool_calls
     - `error`: Error occurred during processing
 
     **SSE format:**
     ```
-    data: {"type": "status", "data": "Searching library..."}
-
     data: {"type": "chunk", "data": "The passage..."}
 
     data: {"type": "done", "data": {"answer": "...", "tool_calls": [...]}}
     ```
+
+    **Cancellation:**
+    The `X-Stream-ID` response header contains the stream ID.
+    POST to `/chat/stream/{stream_id}/cancel` to stop the stream.
 
     **Usage (JavaScript):**
     ```javascript
@@ -77,6 +78,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages, context })
     });
+    const streamId = response.headers.get('X-Stream-ID');
     const reader = response.body.getReader();
     // Process SSE chunks...
     ```
@@ -84,11 +86,15 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     if not request.messages:
         raise HTTPException(status_code=400, detail="Messages list cannot be empty")
 
+    stream_id = chat_service.generate_stream_id()
+
     async def event_generator():
         """Generate SSE events from the streaming agent."""
         async for event in chat_service.process_chat_stream(
             messages=request.messages,
             context=request.context,
+            stream_id=stream_id,
+            model=request.model,
         ):
             # Format as SSE: data: {json}\n\n
             yield f"data: {event.model_dump_json()}\n\n"
@@ -100,5 +106,27 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Stream-ID": stream_id,
         },
     )
+
+
+class CancelResponse(BaseModel):
+    """Response for stream cancellation."""
+    cancelled: bool
+    stream_id: str
+
+
+@router.post("/stream/{stream_id}/cancel", response_model=CancelResponse)
+async def cancel_stream(stream_id: str) -> CancelResponse:
+    """
+    Cancel an active chat stream.
+
+    Args:
+        stream_id: The stream ID from the X-Stream-ID header
+
+    Returns:
+        Whether the stream was found and cancelled
+    """
+    cancelled = chat_service.cancel_stream(stream_id)
+    return CancelResponse(cancelled=cancelled, stream_id=stream_id)

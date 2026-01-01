@@ -349,14 +349,12 @@ async def list_library_works() -> str:
             lines.append(f"  *{work.subtitle}*")
         lines.append(f"  ID: `{work.id}`")
 
-        # Metadata line: type | era | reading level
+        # Metadata line: type | era
         meta_parts = []
         if work.work_type:
             meta_parts.append(work.work_type.value)
         if work.era:
             meta_parts.append(work.era.value)
-        if work.reading_level:
-            meta_parts.append(f"level: {work.reading_level.value}")
         if meta_parts:
             lines.append(f"  [{' | '.join(meta_parts)}]")
 
@@ -421,8 +419,6 @@ async def get_work_toc(work_id: str) -> str:
             meta_parts.append(work.work_type.value)
         if work.era:
             meta_parts.append(work.era.value)
-        if work.reading_level:
-            meta_parts.append(f"level: {work.reading_level.value}")
         if meta_parts:
             lines.append(f"[{' | '.join(meta_parts)}]")
 

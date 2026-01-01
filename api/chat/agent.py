@@ -14,14 +14,14 @@ Supports both synchronous responses and SSE streaming.
 import json
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from typing import Callable
 
 import dspy
-from dspy.streaming import StatusMessageProvider, streamify
+from dspy.streaming import streamify
 
 from api.chat.context_builder import build_context
 from api.chat.history import compact_history
@@ -99,6 +99,37 @@ def _get_tool_timings() -> list[tuple[str, float]]:
     return _tool_timings
 
 
+# =============================================================================
+# Stream Cancellation
+# =============================================================================
+
+# Active streams: stream_id -> cancelled flag
+_active_streams: dict[str, bool] = {}
+
+
+def _register_stream(stream_id: str) -> None:
+    """Register a new stream as active."""
+    _active_streams[stream_id] = False
+
+
+def _cancel_stream(stream_id: str) -> bool:
+    """Cancel a stream. Returns True if stream was found and cancelled."""
+    if stream_id in _active_streams:
+        _active_streams[stream_id] = True
+        return True
+    return False
+
+
+def _is_cancelled(stream_id: str) -> bool:
+    """Check if a stream has been cancelled."""
+    return _active_streams.get(stream_id, False)
+
+
+def _cleanup_stream(stream_id: str) -> None:
+    """Remove a stream from the registry."""
+    _active_streams.pop(stream_id, None)
+
+
 def _wrap_tool_with_logging(tool: dspy.Tool) -> dspy.Tool:
     """Wrap a tool's function to log inputs, outputs, and timing."""
     original_func = tool.func
@@ -151,46 +182,6 @@ TOOLS = [_wrap_tool_with_logging(tool) for tool in RAW_TOOLS]
 
 
 # =============================================================================
-# Streaming Status Provider
-# =============================================================================
-
-# Human-friendly tool name mappings for status messages
-TOOL_DISPLAY_NAMES = {
-    "get_passage": "Reading passage",
-    "get_chapter": "Loading chapter",
-    "get_study_note": "Reading study note",
-    "get_connections": "Finding connections",
-    "search_annotations": "Searching annotations",
-    "list_library_works": "Listing library works",
-    "get_work_toc": "Loading table of contents",
-    "get_library_content": "Reading library content",
-    "search_osb_content": "Searching Scripture",
-    "search_library_content": "Searching library",
-}
-
-
-class OSBStatusProvider(StatusMessageProvider):
-    """Status message provider for streaming tool call updates."""
-
-    def tool_start_status_message(self, instance, inputs: dict) -> str:
-        """Called when a tool starts executing.
-
-        Args:
-            instance: The tool instance being called
-            inputs: Dict of input arguments to the tool
-        """
-        # Get tool name from the instance
-        tool_name = getattr(instance, "name", None) or str(instance)
-        display = TOOL_DISPLAY_NAMES.get(tool_name, f"Using {tool_name}")
-        return display
-
-    def tool_end_status_message(self, outputs) -> str | None:
-        """Called when a tool finishes. Return None to skip sending a message."""
-        # Don't send end messages - the next tool_start or final answer will follow
-        return None
-
-
-# =============================================================================
 # Load System Prompt
 # =============================================================================
 
@@ -231,45 +222,49 @@ class OSBAgent:
     cross-references, and library content.
     """
 
-    def __init__(self, model: str = "glm"):
-        """Initialize the agent.
-
-        Args:
-            model: Model name from lm.py registry (default: 'glm')
-        """
+    def __init__(self):
+        """Initialize the agent."""
         from api.lm import configure_chat_lm
 
-        self.model = model
-        self.lm = configure_chat_lm(model)
+        # Configure with default model initially
+        self.default_model = "glm"
+        configure_chat_lm(self.default_model)
         self.react = dspy.ReAct(
             signature=OSBSignature,
             tools=TOOLS,
             max_iters=MAX_TOOL_ITERATIONS,
         )
-        # Streaming wrapper with status provider for SSE
-        # is_async_program=True because our tools are async
+        # Minimal streaming wrapper - no status provider, no listeners
+        # Just pass through raw LLM output including DSPy markers
         self.react_streaming = streamify(
             self.react,
-            status_message_provider=OSBStatusProvider(),
             is_async_program=True,
         )
-        logger.info(f"OSBAgent initialized with model={model}, {len(TOOLS)} tools")
-        chat_logger.debug(f"OSBAgent initialized: model={model}, tools={[t.name for t in TOOLS]}")
+        logger.info(f"OSBAgent initialized with {len(TOOLS)} tools")
+        chat_logger.debug(f"OSBAgent initialized: tools={[t.name for t in TOOLS]}")
 
     async def forward(
         self,
         messages: list[ChatMessage],
         reading_context: ReadingContext | None = None,
+        model: str | None = None,
     ) -> ChatResponse:
         """Process a chat request.
 
         Args:
             messages: Full conversation history including current question
             reading_context: Current reading position (OSB passage or library node)
+            model: Model to use (glm, grok, kimi, gemini-flash). Defaults to glm.
 
         Returns:
             ChatResponse with assistant message and tool call log
         """
+        from api.lm import configure_chat_lm
+
+        # Configure model for this request
+        selected_model = model or self.default_model
+        configure_chat_lm(selected_model)
+
         request_id = datetime.now().strftime("%H%M%S%f")[:10]
         request_start = time.perf_counter()
         _reset_tool_timings()
@@ -300,7 +295,7 @@ class OSBAgent:
         # =================================================================
         _log_separator(f"NEW CHAT REQUEST [{request_id}]")
 
-        chat_logger.debug(f"Model: {self.model}")
+        chat_logger.debug(f"Model: {selected_model}")
         chat_logger.debug(f"Reading Context: {reading_context.model_dump() if reading_context else 'None'}")
         chat_logger.debug(f"Message Count: {len(messages)}")
 
@@ -486,128 +481,105 @@ class OSBAgent:
 
         return tool_calls, reasoning_steps
 
-    def _extract_tool_calls(self, result) -> list[ToolCall]:
-        """Extract tool calls from ReAct result for logging/transparency.
-
-        Args:
-            result: The ReAct result object
-
-        Returns:
-            List of ToolCall objects showing what tools were used
-        """
-        tool_calls, _ = self._extract_trajectory(result)
-        return tool_calls
-
     async def stream_forward(
         self,
         messages: list[ChatMessage],
         reading_context: ReadingContext | None = None,
+        stream_id: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Process a chat request with streaming response.
 
-        Yields StreamEvent objects for:
-        - STATUS: Tool call status updates (e.g., "Searching library...")
-        - CHUNK: Answer text chunks as they're generated
-        - DONE: Final complete response
-        - ERROR: If something goes wrong
+        Yields raw DSPy output including all markers like [[ ## next_thought ## ]].
+        The client parser handles interpretation of these markers.
 
         Args:
             messages: Full conversation history including current question
             reading_context: Current reading position (OSB passage or library node)
+            stream_id: Optional ID for cancellation support
+            model: Model to use (glm, grok, kimi, gemini-flash). Defaults to glm.
 
         Yields:
-            StreamEvent objects for SSE transmission
+            StreamEvent objects with raw content for SSE transmission
         """
+        from api.lm import configure_chat_lm
+
+        # Configure model for this request
+        selected_model = model or self.default_model
+        configure_chat_lm(selected_model)
+
         request_id = datetime.now().strftime("%H%M%S%f")[:10]
-        request_start = time.perf_counter()
         _reset_tool_timings()
+
+        # Register stream for cancellation if ID provided
+        if stream_id:
+            _register_stream(stream_id)
 
         if not messages:
             yield StreamEvent(type=StreamEventType.ERROR, data="No messages provided")
+            if stream_id:
+                _cleanup_stream(stream_id)
             return
 
         # Build inputs for each DSPy field
         system_str = SYSTEM_PROMPT
         context_str = await build_context(reading_context)
         history_str = await compact_history(messages[:-1])
-        question_str = messages[-1].content
-
-        # Strip debug flag if present (streaming doesn't support debug mode)
-        question_str = question_str.replace("@debug@", "").strip()
+        question_str = messages[-1].content.replace("@debug@", "").strip()
 
         _log_separator(f"NEW STREAMING REQUEST [{request_id}]")
-        chat_logger.debug(f"Model: {self.model}")
+        chat_logger.debug(f"Model: {selected_model}")
         _log_section("CURRENT QUESTION", question_str)
-        chat_logger.debug("--- STREAMING TOOL EXECUTION ---")
 
         # Set chat context for relevance judge
         judge_context = f"{history_str}\n\nUser: {question_str}" if history_str else f"User: {question_str}"
         set_chat_context(judge_context)
 
-        # Accumulate raw LLM output for logging
-        raw_llm_output = []
-
         try:
-            # Use streaming ReAct - streamify returns a callable, not a module
             async for chunk in self.react_streaming(
                 system=system_str,
                 reading_context=context_str,
                 conversation=history_str,
                 question=question_str,
             ):
-                # Check if it's a status message (tool updates)
-                if hasattr(chunk, "__class__") and "StatusMessage" in chunk.__class__.__name__:
-                    status_msg = str(chunk.message) if hasattr(chunk, "message") else str(chunk)
-                    chat_logger.debug(f"  STATUS: {status_msg}")
-                    yield StreamEvent(type=StreamEventType.STATUS, data=status_msg)
+                # Check for cancellation
+                if stream_id and _is_cancelled(stream_id):
+                    chat_logger.debug(f"Stream {stream_id} cancelled")
+                    yield StreamEvent(type=StreamEventType.DONE, data={"cancelled": True})
+                    return
 
-                # Check if it's a LiteLLM streaming chunk (ModelResponseStream)
-                elif hasattr(chunk, "choices") and chunk.choices:
-                    # LiteLLM ModelResponseStream: text is in choices[0].delta.content
-                    delta = getattr(chunk.choices[0], "delta", None)
-                    if delta:
-                        content = getattr(delta, "content", None)
-                        if content:
-                            raw_llm_output.append(content)
-                            yield StreamEvent(type=StreamEventType.CHUNK, data=content)
-
-                # Check if it's the final Prediction
-                elif isinstance(chunk, dspy.Prediction) or hasattr(chunk, "answer"):
-                    answer = chunk.answer if hasattr(chunk, "answer") else str(chunk)
-
-                    # Log raw LLM output (includes reasoning, tool calls, etc.)
-                    if raw_llm_output:
-                        _log_section("RAW LLM OUTPUT (reasoning + tool calls)", "".join(raw_llm_output))
-
-                    # Log final answer
-                    _log_section("FINAL ANSWER (streamed)", answer)
-
-                    # Timing summary
-                    total_time = time.perf_counter() - request_start
-                    tool_timings = _get_tool_timings()
-                    chat_logger.debug(f"Total time: {total_time:.3f}s, Tools: {len(tool_timings)}")
-                    _log_separator(f"END STREAMING [{request_id}]")
-
-                    # Extract tool calls for the done event
-                    tool_calls, _ = self._extract_trajectory(chunk)
-
+                # Final Prediction - we're done
+                if isinstance(chunk, dspy.Prediction) or hasattr(chunk, "answer"):
+                    answer = chunk.answer if hasattr(chunk, "answer") else ""
                     yield StreamEvent(
                         type=StreamEventType.DONE,
-                        data={
-                            "answer": answer,
-                            "tool_calls": [tc.model_dump() for tc in tool_calls],
-                        },
+                        data={"answer": answer, "tool_calls": []},
                     )
                     return
 
-                # Plain string chunks (actual text streaming from LLM)
+                # Extract content from chunk - pass through raw, no filtering
+                content = None
+                if hasattr(chunk, "choices") and chunk.choices:
+                    delta = getattr(chunk.choices[0], "delta", None)
+                    if delta:
+                        content = getattr(delta, "content", None)
                 elif isinstance(chunk, str):
-                    yield StreamEvent(type=StreamEventType.CHUNK, data=chunk)
+                    content = chunk
+
+                if content:
+                    chat_logger.debug(f"CHUNK: {content[:100]}")
+                    yield StreamEvent(type=StreamEventType.CHUNK, data=content)
+
+            # Stream ended without Prediction
+            yield StreamEvent(type=StreamEventType.DONE, data={"answer": "", "tool_calls": []})
 
         except Exception as e:
-            chat_logger.debug(f"STREAMING ERROR: {e}")
             logger.error(f"Streaming error: {e}")
             yield StreamEvent(type=StreamEventType.ERROR, data=str(e))
+
+        finally:
+            if stream_id:
+                _cleanup_stream(stream_id)
 
 
 # =============================================================================
@@ -618,24 +590,18 @@ class OSBAgent:
 _agent: OSBAgent | None = None
 
 
-def get_agent(model: str = "glm") -> OSBAgent:
-    """Get or create the singleton agent instance.
-
-    Args:
-        model: Model name (only used on first call)
-
-    Returns:
-        The OSBAgent instance
-    """
+def get_agent() -> OSBAgent:
+    """Get or create the singleton agent instance."""
     global _agent
     if _agent is None:
-        _agent = OSBAgent(model=model)
+        _agent = OSBAgent()
     return _agent
 
 
 async def process_chat(
     messages: list[ChatMessage],
     context: ReadingContext | None = None,
+    model: str | None = None,
 ) -> ChatResponse:
     """Process a chat request with the OSB agent.
 
@@ -644,17 +610,25 @@ async def process_chat(
     Args:
         messages: Conversation history from frontend
         context: Current reading context
+        model: Model to use (glm, grok, kimi, gemini-flash). Defaults to glm.
 
     Returns:
         ChatResponse with assistant message and tool calls
     """
     agent = get_agent()
-    return await agent.forward(messages, context)
+    return await agent.forward(messages, context, model)
+
+
+def generate_stream_id() -> str:
+    """Generate a unique stream ID for cancellation support."""
+    return str(uuid.uuid4())
 
 
 async def process_chat_stream(
     messages: list[ChatMessage],
     context: ReadingContext | None = None,
+    stream_id: str | None = None,
+    model: str | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """Process a chat request with streaming response.
 
@@ -663,10 +637,24 @@ async def process_chat_stream(
     Args:
         messages: Conversation history from frontend
         context: Current reading context
+        stream_id: Optional ID for cancellation support
+        model: Model to use (glm, grok, kimi, gemini-flash). Defaults to glm.
 
     Yields:
         StreamEvent objects for SSE transmission
     """
     agent = get_agent()
-    async for event in agent.stream_forward(messages, context):
+    async for event in agent.stream_forward(messages, context, stream_id, model):
         yield event
+
+
+def cancel_stream(stream_id: str) -> bool:
+    """Cancel an active stream.
+
+    Args:
+        stream_id: The stream ID to cancel
+
+    Returns:
+        True if stream was found and cancelled, False otherwise
+    """
+    return _cancel_stream(stream_id)

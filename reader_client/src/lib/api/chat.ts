@@ -20,6 +20,12 @@ import type {
 const AUTH_STORAGE_KEY = 'orthodox_reader_secret';
 const AUTH_HEADER = 'hmog-secret';
 
+/** Result from starting a stream - includes both abort controller and stream ID for cancellation */
+export interface StreamHandle {
+	controller: AbortController;
+	streamId: string | null;
+}
+
 function getAuthSecret(): string | null {
 	if (!browser) return null;
 	try {
@@ -50,15 +56,18 @@ export async function sendChatMessage(
  * @param messages - Full conversation history
  * @param context - Current reading position context
  * @param callbacks - Callbacks for streaming events
- * @returns AbortController to cancel the stream
+ * @param model - Optional model override (null = server default)
+ * @returns StreamHandle with controller and streamId for cancellation
  */
 export async function sendChatMessageStream(
 	messages: ChatMessage[],
 	context: ChatContext | null,
-	callbacks: StreamCallbacks
-): Promise<AbortController> {
+	callbacks: StreamCallbacks,
+	model?: string | null
+): Promise<StreamHandle> {
 	const controller = new AbortController();
-	const request: ChatRequest = { messages, context };
+	const request: ChatRequest = { messages, context, model };
+	let streamId: string | null = null;
 
 	// Build headers with auth
 	const headers: Record<string, string> = {
@@ -77,15 +86,18 @@ export async function sendChatMessageStream(
 			signal: controller.signal
 		});
 
+		// Capture stream ID from response header
+		streamId = response.headers.get('X-Stream-ID');
+
 		if (!response.ok) {
 			const error = await response.text();
 			callbacks.onError?.(error || `HTTP ${response.status}`);
-			return controller;
+			return { controller, streamId };
 		}
 
 		if (!response.body) {
 			callbacks.onError?.('No response body');
-			return controller;
+			return { controller, streamId };
 		}
 
 		// Read SSE stream
@@ -136,11 +148,46 @@ export async function sendChatMessageStream(
 		}
 	}
 
-	return controller;
+	return { controller, streamId };
+}
+
+/**
+ * Cancel an active chat stream on the backend
+ *
+ * @param streamId - The stream ID from the X-Stream-ID header
+ * @returns Whether the stream was successfully cancelled
+ */
+export async function cancelChatStream(streamId: string): Promise<boolean> {
+	const headers: Record<string, string> = {
+		'Content-Type': 'application/json'
+	};
+	const secret = getAuthSecret();
+	if (secret) {
+		headers[AUTH_HEADER] = secret;
+	}
+
+	try {
+		const response = await fetch(`${api.baseUrl}/chat/stream/${streamId}/cancel`, {
+			method: 'POST',
+			headers
+		});
+
+		if (!response.ok) {
+			console.warn('Failed to cancel stream:', response.status);
+			return false;
+		}
+
+		const result = await response.json();
+		return result.cancelled ?? false;
+	} catch (err) {
+		console.warn('Error cancelling stream:', err);
+		return false;
+	}
 }
 
 /** Chat API namespace */
 export const chatApi = {
 	send: sendChatMessage,
-	stream: sendChatMessageStream
+	stream: sendChatMessageStream,
+	cancelStream: cancelChatStream
 };
