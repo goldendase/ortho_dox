@@ -207,6 +207,8 @@ def get_vision_lm() -> dspy.LM:
 def configure_chat_lm(model: str = "glm") -> dspy.LM:
     """Configure DSPy for chat with text-based tool calling.
 
+    DEPRECATED: Use get_chat_context() with dspy.context() for async-safe configuration.
+
     Sets up both the LM and the ChatAdapter. Native function calling is disabled
     because GLM doesn't support it and DSPy ReAct uses text-based tool calling anyway.
 
@@ -220,3 +222,22 @@ def configure_chat_lm(model: str = "glm") -> dspy.LM:
     adapter = dspy.ChatAdapter(use_native_function_calling=False)
     dspy.configure(lm=lm, adapter=adapter)
     return lm
+
+
+def get_chat_context(model: str = "glm") -> dict:
+    """Get DSPy context kwargs for chat with text-based tool calling.
+
+    Use this with dspy.context() for async-safe per-request configuration.
+    Example:
+        with dspy.context(**get_chat_context(model)):
+            # DSPy operations here
+
+    Args:
+        model: Model name from MODELS registry, or raw litellm model ID
+
+    Returns:
+        Dict with lm and adapter for dspy.context()
+    """
+    lm = get_lm(model)
+    adapter = dspy.ChatAdapter(use_native_function_calling=False)
+    return {"lm": lm, "adapter": adapter}

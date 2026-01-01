@@ -224,11 +224,10 @@ class OSBAgent:
 
     def __init__(self):
         """Initialize the agent."""
-        from api.lm import configure_chat_lm
-
-        # Configure with default model initially
+        # Default model for requests that don't specify one
         self.default_model = "glm"
-        configure_chat_lm(self.default_model)
+        # Note: No global dspy.configure() here - we use dspy.context() per-request
+        # for async-safe model configuration
         self.react = dspy.ReAct(
             signature=OSBSignature,
             tools=TOOLS,
@@ -259,11 +258,11 @@ class OSBAgent:
         Returns:
             ChatResponse with assistant message and tool call log
         """
-        from api.lm import configure_chat_lm
+        from api.lm import get_chat_context
 
-        # Configure model for this request
+        # Configure model for this request (async-safe using dspy.context)
         selected_model = model or self.default_model
-        configure_chat_lm(selected_model)
+        ctx = get_chat_context(selected_model)
 
         request_id = datetime.now().strftime("%H%M%S%f")[:10]
         request_start = time.perf_counter()
@@ -311,130 +310,131 @@ class OSBAgent:
         judge_context = f"{history_str}\n\nUser: {question_str}" if history_str else f"User: {question_str}"
         set_chat_context(judge_context)
 
-        # Retry loop
+        # Retry loop (wrapped in dspy.context for async-safe model config)
         last_error = None
-        for attempt in range(MAX_RETRIES):
-            try:
-                chat_logger.debug(f"")
-                chat_logger.debug(f"[Attempt {attempt + 1}/{MAX_RETRIES}]")
+        with dspy.context(**ctx):
+            for attempt in range(MAX_RETRIES):
+                try:
+                    chat_logger.debug(f"")
+                    chat_logger.debug(f"[Attempt {attempt + 1}/{MAX_RETRIES}]")
 
-                # Call ReAct asynchronously
-                result = await self.react.acall(
-                    system=system_str,
-                    reading_context=context_str,
-                    conversation=history_str,
-                    question=question_str,
-                )
-
-                # ALWAYS extract and log trajectory (even if answer is empty/missing)
-                tool_calls, reasoning_steps = [], []
-                if result:
-                    tool_calls, reasoning_steps = self._extract_trajectory(result)
-
-                # ==========================================================
-                # LOG: LLM Reasoning (ALWAYS logged when available)
-                # ==========================================================
-                if reasoning_steps:
-                    chat_logger.debug("")
-                    chat_logger.debug("╔══════════════════════════════════════════════════════════════════════════════╗")
-                    chat_logger.debug("║                           LLM REASONING / THINKING                           ║")
-                    chat_logger.debug("╚══════════════════════════════════════════════════════════════════════════════╝")
-                    for i, thought in enumerate(reasoning_steps, 1):
-                        chat_logger.debug(f"")
-                        chat_logger.debug(f"[Step {i}]")
-                        chat_logger.debug(thought)
-                    chat_logger.debug("")
-                    chat_logger.debug("════════════════════════════════════════════════════════════════════════════════")
-
-                if result and hasattr(result, 'answer') and result.answer:
-                    # ==========================================================
-                    # LOG: Final Response
-                    # ==========================================================
-                    _log_section("FINAL ANSWER", result.answer)
-
-                    # Timing summary
-                    total_time = time.perf_counter() - request_start
-                    tool_timings = _get_tool_timings()
-                    total_tool_time = sum(t for _, t in tool_timings)
-
-                    chat_logger.debug("")
-                    chat_logger.debug("--- TIMING SUMMARY ---")
-                    chat_logger.debug(f"Total request time: {total_time:.3f}s")
-                    chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
-                    chat_logger.debug(f"LLM/other time:     {total_time - total_tool_time:.3f}s")
-                    chat_logger.debug(f"Tool calls made: {len(tool_calls)}")
-                    for name, elapsed in tool_timings:
-                        chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
-
-                    _log_separator(f"END REQUEST [{request_id}]")
-
-                    logger.info(
-                        "Agent completed: %d tool calls, answer_len=%d",
-                        len(tool_calls),
-                        len(result.answer),
+                    # Call ReAct asynchronously
+                    result = await self.react.acall(
+                        system=system_str,
+                        reading_context=context_str,
+                        conversation=history_str,
+                        question=question_str,
                     )
 
-                    # Build final answer, optionally with debug info
-                    final_answer = result.answer
-                    if debug_mode:
-                        debug_lines = ["[DEBUG]"]
-                        # Add reasoning
-                        if reasoning_steps:
-                            debug_lines.append("**Reasoning:**")
-                            for i, thought in enumerate(reasoning_steps, 1):
-                                debug_lines.append(f"{i}. {thought}")
+                    # ALWAYS extract and log trajectory (even if answer is empty/missing)
+                    tool_calls, reasoning_steps = [], []
+                    if result:
+                        tool_calls, reasoning_steps = self._extract_trajectory(result)
+
+                    # ==========================================================
+                    # LOG: LLM Reasoning (ALWAYS logged when available)
+                    # ==========================================================
+                    if reasoning_steps:
+                        chat_logger.debug("")
+                        chat_logger.debug("╔══════════════════════════════════════════════════════════════════════════════╗")
+                        chat_logger.debug("║                           LLM REASONING / THINKING                           ║")
+                        chat_logger.debug("╚══════════════════════════════════════════════════════════════════════════════╝")
+                        for i, thought in enumerate(reasoning_steps, 1):
+                            chat_logger.debug(f"")
+                            chat_logger.debug(f"[Step {i}]")
+                            chat_logger.debug(thought)
+                        chat_logger.debug("")
+                        chat_logger.debug("════════════════════════════════════════════════════════════════════════════════")
+
+                    if result and hasattr(result, 'answer') and result.answer:
+                        # ==========================================================
+                        # LOG: Final Response
+                        # ==========================================================
+                        _log_section("FINAL ANSWER", result.answer)
+
+                        # Timing summary
+                        total_time = time.perf_counter() - request_start
+                        tool_timings = _get_tool_timings()
+                        total_tool_time = sum(t for _, t in tool_timings)
+
+                        chat_logger.debug("")
+                        chat_logger.debug("--- TIMING SUMMARY ---")
+                        chat_logger.debug(f"Total request time: {total_time:.3f}s")
+                        chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
+                        chat_logger.debug(f"LLM/other time:     {total_time - total_tool_time:.3f}s")
+                        chat_logger.debug(f"Tool calls made: {len(tool_calls)}")
+                        for name, elapsed in tool_timings:
+                            chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
+
+                        _log_separator(f"END REQUEST [{request_id}]")
+
+                        logger.info(
+                            "Agent completed: %d tool calls, answer_len=%d",
+                            len(tool_calls),
+                            len(result.answer),
+                        )
+
+                        # Build final answer, optionally with debug info
+                        final_answer = result.answer
+                        if debug_mode:
+                            debug_lines = ["[DEBUG]"]
+                            # Add reasoning
+                            if reasoning_steps:
+                                debug_lines.append("**Reasoning:**")
+                                for i, thought in enumerate(reasoning_steps, 1):
+                                    debug_lines.append(f"{i}. {thought}")
+                                debug_lines.append("")
+                            # Add tool calls (name and args only, no results)
+                            if tool_calls:
+                                debug_lines.append("**Tool Calls:**")
+                                for tc in tool_calls:
+                                    args_str = json.dumps(tc.arguments, default=str)
+                                    debug_lines.append(f"- `{tc.name}({args_str})`")
+                            debug_lines.append("[/DEBUG]")
                             debug_lines.append("")
-                        # Add tool calls (name and args only, no results)
-                        if tool_calls:
-                            debug_lines.append("**Tool Calls:**")
-                            for tc in tool_calls:
-                                args_str = json.dumps(tc.arguments, default=str)
-                                debug_lines.append(f"- `{tc.name}({args_str})`")
-                        debug_lines.append("[/DEBUG]")
-                        debug_lines.append("")
-                        final_answer = "\n".join(debug_lines) + final_answer
+                            final_answer = "\n".join(debug_lines) + final_answer
 
-                    return ChatResponse(
-                        message=ChatMessage(
-                            role=MessageRole.ASSISTANT,
-                            content=final_answer,
-                        ),
-                        tool_calls=tool_calls,
-                    )
+                        return ChatResponse(
+                            message=ChatMessage(
+                                role=MessageRole.ASSISTANT,
+                                content=final_answer,
+                            ),
+                            tool_calls=tool_calls,
+                        )
 
-                # Empty response, retry
-                chat_logger.debug("  Empty response, retrying...")
-                logger.warning(f"Empty response on attempt {attempt + 1}")
+                    # Empty response, retry
+                    chat_logger.debug("  Empty response, retrying...")
+                    logger.warning(f"Empty response on attempt {attempt + 1}")
 
-            except Exception as e:
-                last_error = e
-                chat_logger.debug(f"  ERROR: {e}")
-                logger.warning(f"ReAct attempt {attempt + 1} failed: {e}")
+                except Exception as e:
+                    last_error = e
+                    chat_logger.debug(f"  ERROR: {e}")
+                    logger.warning(f"ReAct attempt {attempt + 1} failed: {e}")
 
-        # All retries exhausted
-        total_time = time.perf_counter() - request_start
-        tool_timings = _get_tool_timings()
-        total_tool_time = sum(t for _, t in tool_timings)
+            # All retries exhausted (still inside dspy.context)
+            total_time = time.perf_counter() - request_start
+            tool_timings = _get_tool_timings()
+            total_tool_time = sum(t for _, t in tool_timings)
 
-        chat_logger.debug("")
-        chat_logger.debug(f"ALL RETRIES EXHAUSTED. Last error: {last_error}")
-        chat_logger.debug("")
-        chat_logger.debug("--- TIMING SUMMARY (FAILED) ---")
-        chat_logger.debug(f"Total request time: {total_time:.3f}s")
-        chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
-        for name, elapsed in tool_timings:
-            chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
-        _log_separator(f"END REQUEST [{request_id}] - FAILED")
+            chat_logger.debug("")
+            chat_logger.debug(f"ALL RETRIES EXHAUSTED. Last error: {last_error}")
+            chat_logger.debug("")
+            chat_logger.debug("--- TIMING SUMMARY (FAILED) ---")
+            chat_logger.debug(f"Total request time: {total_time:.3f}s")
+            chat_logger.debug(f"Total tool time:    {total_tool_time:.3f}s")
+            for name, elapsed in tool_timings:
+                chat_logger.debug(f"  - {name}: {elapsed:.3f}s")
+            _log_separator(f"END REQUEST [{request_id}] - FAILED")
 
-        logger.error(f"All {MAX_RETRIES} attempts failed. Last error: {last_error}")
-        return ChatResponse(
-            message=ChatMessage(
-                role=MessageRole.ASSISTANT,
-                content="I apologize, but I'm having trouble responding right now. Please try again in a moment.",
-            ),
-            tool_calls=[],
-            error=str(last_error) if last_error else "Failed to generate response",
-        )
+            logger.error(f"All {MAX_RETRIES} attempts failed. Last error: {last_error}")
+            return ChatResponse(
+                message=ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content="I apologize, but I'm having trouble responding right now. Please try again in a moment.",
+                ),
+                tool_calls=[],
+                error=str(last_error) if last_error else "Failed to generate response",
+            )
 
     def _extract_trajectory(self, result) -> tuple[list[ToolCall], list[str]]:
         """Extract tool calls and reasoning from ReAct result.
@@ -502,11 +502,11 @@ class OSBAgent:
         Yields:
             StreamEvent objects with raw content for SSE transmission
         """
-        from api.lm import configure_chat_lm
+        from api.lm import get_chat_context
 
-        # Configure model for this request
+        # Configure model for this request (async-safe using dspy.context)
         selected_model = model or self.default_model
-        configure_chat_lm(selected_model)
+        ctx = get_chat_context(selected_model)
 
         request_id = datetime.now().strftime("%H%M%S%f")[:10]
         _reset_tool_timings()
@@ -536,42 +536,43 @@ class OSBAgent:
         set_chat_context(judge_context)
 
         try:
-            async for chunk in self.react_streaming(
-                system=system_str,
-                reading_context=context_str,
-                conversation=history_str,
-                question=question_str,
-            ):
-                # Check for cancellation
-                if stream_id and _is_cancelled(stream_id):
-                    chat_logger.debug(f"Stream {stream_id} cancelled")
-                    yield StreamEvent(type=StreamEventType.DONE, data={"cancelled": True})
-                    return
+            with dspy.context(**ctx):
+                async for chunk in self.react_streaming(
+                    system=system_str,
+                    reading_context=context_str,
+                    conversation=history_str,
+                    question=question_str,
+                ):
+                    # Check for cancellation
+                    if stream_id and _is_cancelled(stream_id):
+                        chat_logger.debug(f"Stream {stream_id} cancelled")
+                        yield StreamEvent(type=StreamEventType.DONE, data={"cancelled": True})
+                        return
 
-                # Final Prediction - we're done
-                if isinstance(chunk, dspy.Prediction) or hasattr(chunk, "answer"):
-                    answer = chunk.answer if hasattr(chunk, "answer") else ""
-                    yield StreamEvent(
-                        type=StreamEventType.DONE,
-                        data={"answer": answer, "tool_calls": []},
-                    )
-                    return
+                    # Final Prediction - we're done
+                    if isinstance(chunk, dspy.Prediction) or hasattr(chunk, "answer"):
+                        answer = chunk.answer if hasattr(chunk, "answer") else ""
+                        yield StreamEvent(
+                            type=StreamEventType.DONE,
+                            data={"answer": answer, "tool_calls": []},
+                        )
+                        return
 
-                # Extract content from chunk - pass through raw, no filtering
-                content = None
-                if hasattr(chunk, "choices") and chunk.choices:
-                    delta = getattr(chunk.choices[0], "delta", None)
-                    if delta:
-                        content = getattr(delta, "content", None)
-                elif isinstance(chunk, str):
-                    content = chunk
+                    # Extract content from chunk - pass through raw, no filtering
+                    content = None
+                    if hasattr(chunk, "choices") and chunk.choices:
+                        delta = getattr(chunk.choices[0], "delta", None)
+                        if delta:
+                            content = getattr(delta, "content", None)
+                    elif isinstance(chunk, str):
+                        content = chunk
 
-                if content:
-                    chat_logger.debug(f"CHUNK: {content[:100]}")
-                    yield StreamEvent(type=StreamEventType.CHUNK, data=content)
+                    if content:
+                        chat_logger.debug(f"CHUNK: {content[:100]}")
+                        yield StreamEvent(type=StreamEventType.CHUNK, data=content)
 
-            # Stream ended without Prediction
-            yield StreamEvent(type=StreamEventType.DONE, data={"answer": "", "tool_calls": []})
+                # Stream ended without Prediction
+                yield StreamEvent(type=StreamEventType.DONE, data={"answer": "", "tool_calls": []})
 
         except Exception as e:
             logger.error(f"Streaming error: {e}")
