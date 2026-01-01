@@ -101,8 +101,9 @@ async def get_works(
     author_ids = list({w.get("author_id") for w in works_raw if w.get("author_id")})
     author_names = await _resolve_author_names(author_ids)
 
-    # Get node counts per work
+    # Get node counts per work (exclude HIDDEN nodes)
     node_stats = await db.library_nodes.aggregate([
+        {"$match": {"status": {"$ne": "HIDE"}}},
         {"$group": {
             "_id": "$book_id",
             "node_count": {"$sum": 1},
@@ -176,9 +177,10 @@ async def get_work(work_id: str) -> WorkDetail | None:
     # Resolve author name
     author_name = await _resolve_author_name(work.get("author_id"))
 
-    # Get node counts
-    node_count = await db.library_nodes.count_documents({"book_id": work_id})
-    leaf_count = await db.library_nodes.count_documents({"book_id": work_id, "is_leaf": True})
+    # Get node counts (exclude HIDDEN nodes)
+    base_query = {"book_id": work_id, "status": {"$ne": "HIDE"}}
+    node_count = await db.library_nodes.count_documents(base_query)
+    leaf_count = await db.library_nodes.count_documents({**base_query, "is_leaf": True})
 
     # Get scripture ref count
     ref_count = await db.library_scripture_refs.count_documents({"book_id": work_id})
@@ -223,9 +225,9 @@ async def get_work_toc(work_id: str) -> WorkTOCResponse | None:
     if not work:
         return None
 
-    # Get all nodes for this work
+    # Get all nodes for this work (exclude HIDDEN nodes)
     nodes_cursor = db.library_nodes.find(
-        {"book_id": work_id},
+        {"book_id": work_id, "status": {"$ne": "HIDE"}},
         {"_id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
     )
     nodes_raw = await nodes_cursor.to_list(length=None)
@@ -303,7 +305,7 @@ async def get_node(
     """Get a single node with optional expansion."""
     db = MongoDB.db_dox
 
-    node = await db.library_nodes.find_one({"_id": node_id, "book_id": work_id})
+    node = await db.library_nodes.find_one({"_id": node_id, "book_id": work_id, "status": {"$ne": "HIDE"}})
     if not node:
         return None
 
@@ -427,11 +429,11 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
 
     parent_id = node.get("parent_id")
 
-    # Get parent
+    # Get parent (exclude HIDDEN parents)
     parent = None
     if parent_id:
         parent_data = await db.library_nodes.find_one(
-            {"_id": parent_id},
+            {"_id": parent_id, "status": {"$ne": "HIDE"}},
             {"_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1}
         )
         if parent_data:
@@ -449,9 +451,9 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
     next_node = None
 
     if node.get("is_leaf"):
-        # Get all nodes for this work to build tree
+        # Get all nodes for this work to build tree (exclude HIDDEN)
         all_nodes = await db.library_nodes.find(
-            {"book_id": work_id},
+            {"book_id": work_id, "status": {"$ne": "HIDE"}},
             {"_id": 1, "parent_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
         ).to_list(length=None)
 
@@ -481,9 +483,9 @@ async def _get_node_navigation(work_id: str, node_id: str, node: dict) -> NodeNa
                     )
                 break
     else:
-        # For non-leaf nodes, use sibling-based navigation
+        # For non-leaf nodes, use sibling-based navigation (exclude HIDDEN)
         siblings = await db.library_nodes.find(
-            {"book_id": work_id, "parent_id": parent_id},
+            {"book_id": work_id, "parent_id": parent_id, "status": {"$ne": "HIDE"}},
             {"_id": 1, "title": 1, "label": 1, "node_type": 1, "is_leaf": 1, "order": 1}
         ).sort("order", 1).to_list(length=None)
 
@@ -658,10 +660,10 @@ async def get_work_scripture_refs(
     refs_raw = await db.library_scripture_refs.find(query).skip(offset).limit(limit).to_list(length=limit)
     total = await db.library_scripture_refs.count_documents(query)
 
-    # Get node titles for context
+    # Get node titles for context (exclude HIDDEN nodes)
     node_ids = list({r.get("source_node_id") for r in refs_raw if r.get("source_node_id")})
     nodes = await db.library_nodes.find(
-        {"_id": {"$in": node_ids}},
+        {"_id": {"$in": node_ids}, "status": {"$ne": "HIDE"}},
         {"_id": 1, "title": 1}
     ).to_list(length=None)
     node_titles = {n["_id"]: n.get("title") for n in nodes}
@@ -704,9 +706,9 @@ async def get_node_scripture_refs(
     """Get scripture references from a specific node."""
     db = MongoDB.db_dox
 
-    # Verify node exists
+    # Verify node exists (exclude HIDDEN nodes)
     node = await db.library_nodes.find_one(
-        {"_id": node_id, "book_id": work_id},
+        {"_id": node_id, "book_id": work_id, "status": {"$ne": "HIDE"}},
         {"title": 1}
     )
     if not node:
@@ -790,7 +792,7 @@ async def get_library_refs_for_passage(passage_id: str) -> PassageLibraryRefsRes
     author_names = await _resolve_author_names(author_ids)
 
     nodes = await db.library_nodes.find(
-        {"_id": {"$in": node_ids}},
+        {"_id": {"$in": node_ids}, "status": {"$ne": "HIDE"}},
         {"_id": 1, "title": 1, "content": 1}
     ).to_list(length=None)
     nodes_by_id = {n["_id"]: n for n in nodes}

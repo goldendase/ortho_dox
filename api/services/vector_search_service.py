@@ -200,9 +200,10 @@ async def search_library(
 
         # Query MongoDB nodes collection to resolve vector_id -> logical id
         # Each node has pinecone_vector_id array containing its chunk vector IDs
+        # Exclude HIDDEN nodes from search results
         db = MongoDB.db_dox
         node_docs = await db.library_nodes.find(
-            {"pinecone_vector_id": {"$in": vector_ids}},
+            {"pinecone_vector_id": {"$in": vector_ids}, "status": {"$ne": "HIDE"}},
             {"_id": 1, "pinecone_vector_id": 1}
         ).to_list(length=None)
 
