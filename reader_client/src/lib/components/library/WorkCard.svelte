@@ -3,7 +3,7 @@
 
   Displays a library work in brief or expanded mode.
   - Brief: title, author, era badge, work type badge
-  - Expanded: + description, contributors, reading level, tags, "Begin Reading"
+  - Expanded: + description, contributors, reading level, "Begin Reading"
 -->
 <script lang="ts">
 	import type { LibraryWorkSummary } from '$lib/api/types';
@@ -177,15 +177,6 @@
 					{work.node_count} sections
 				</span>
 			</div>
-
-			<!-- Tags -->
-			{#if work.tags.length > 0}
-				<div class="work-tags">
-					{#each work.tags as tag}
-						<span class="tag">{tag}</span>
-					{/each}
-				</div>
-			{/if}
 
 			<!-- Actions -->
 			<div class="card-actions">
@@ -393,21 +384,6 @@
 	.difficulty-dot.filled {
 		background: var(--color-gold);
 		border-color: var(--color-gold);
-	}
-
-	.work-tags {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-1);
-	}
-
-	.tag {
-		font-size: var(--font-xs);
-		font-family: var(--font-ui);
-		color: var(--color-text-muted);
-		background: var(--color-bg-surface);
-		padding: 2px var(--space-2);
-		border-radius: var(--radius-sm);
 	}
 
 	.card-actions {
