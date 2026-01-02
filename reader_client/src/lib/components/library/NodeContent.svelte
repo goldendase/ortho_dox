@@ -126,7 +126,7 @@
 					const attribution = quote.attribution
 						? `<cite>— ${escapeHtml(quote.attribution)}</cite>`
 						: '';
-					return `<blockquote class="embedded-quote">${escapeHtml(quote.content)}${attribution}</blockquote>`;
+					return `<blockquote class="embedded-quote">${processQuoteContent(quote.content)}${attribution}</blockquote>`;
 				}
 				return '';
 			}
@@ -141,7 +141,7 @@
 					const attribution = epigraph.attribution
 						? `<cite>— ${escapeHtml(epigraph.attribution)}</cite>`
 						: '';
-					return `<div class="epigraph"><blockquote>${escapeHtml(epigraph.content)}</blockquote>${attribution}</div>`;
+					return `<div class="epigraph"><blockquote>${processQuoteContent(epigraph.content)}</blockquote>${attribution}</div>`;
 				}
 				return '';
 			}
@@ -170,6 +170,38 @@
 			.replace(/>/g, '&gt;')
 			.replace(/"/g, '&quot;')
 			.replace(/'/g, '&#039;');
+	}
+
+	// Convert newlines to <br> for quote/epigraph content (after escaping)
+	// Also process footnote markers inside quotes
+	function processQuoteContent(text: string): string {
+		let processed = escapeHtml(text).replace(/\n\n/g, '<br />');
+
+		// Replace footnote markers inside quotes
+		processed = processed.replace(
+			/\[footnote\[([^\]]+)\]\]/g,
+			(_, id) => {
+				const fn = footnotesMap.get(id);
+				if (fn) {
+					return `<span class="footnote-placeholder" data-id="${id}" data-marker="${fn.marker}"></span>`;
+				}
+				return '';
+			}
+		);
+
+		// Replace endnote markers inside quotes
+		processed = processed.replace(
+			/\[endnote\[([^\]]+)\]\]/g,
+			(_, id) => {
+				const fn = footnotesMap.get(id);
+				if (fn) {
+					return `<span class="footnote-placeholder" data-id="${id}" data-marker="${fn.marker}"></span>`;
+				}
+				return '';
+			}
+		);
+
+		return processed;
 	}
 
 	const processedContent = $derived(processContent(node.content));

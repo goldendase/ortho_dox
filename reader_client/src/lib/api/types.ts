@@ -437,7 +437,7 @@ export interface StreamCallbacks {
 export type Era = 'apostolic' | 'nicene' | 'byzantine' | 'early_modern' | 'modern';
 export type WorkType = 'commentary' | 'ascetical' | 'pastoral' | 'doctrinal' | 'historical';
 export type ReadingLevel = 'inquirer' | 'catechumen' | 'faithful' | 'scholar';
-export type ContributorRole = 'translator' | 'editor' | 'compiler';
+export type ContributorRole = 'translator' | 'editor' | 'compiler' | 'contributor';
 export type Tradition =
 	| 'eastern_orthodox'
 	| 'oriental_orthodox'

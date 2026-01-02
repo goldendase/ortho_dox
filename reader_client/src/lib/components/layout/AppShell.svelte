@@ -221,7 +221,7 @@
 	.study-panel-backdrop {
 		position: fixed;
 		inset: 0;
-		background: transparent;
+		background: rgba(0, 0, 0, 0.3);
 		z-index: 15;
 	}
 

@@ -56,6 +56,7 @@ class ContributorRole(str, Enum):
     TRANSLATOR = "translator"
     EDITOR = "editor"
     COMPILER = "compiler"
+    CONTRIBUTOR = "contributor"  # Catch-all for forewords, introductions, etc.
 
 
 class ComponentType(str, Enum):
