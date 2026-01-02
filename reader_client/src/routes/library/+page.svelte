@@ -183,12 +183,27 @@
 		</p>
 	</header>
 
-	<!-- Mobile Filter Bar -->
+	<!-- Mobile Search + Filter Bar -->
 	<div class="mobile-bar mobile-only">
+		<div class="mobile-search-wrapper">
+			<Icon name="search" size={16} />
+			<input
+				type="text"
+				class="mobile-search-input"
+				placeholder="Search works..."
+				bind:value={searchQuery}
+				oninput={handleSearchInput}
+			/>
+			{#if searchQuery}
+				<button class="clear-search" onclick={() => { searchQuery = ''; updateUrl(); }}>
+					<Icon name="x" size={14} />
+				</button>
+			{/if}
+		</div>
 		<button class="mobile-filter-btn" onclick={() => (showMobileFilters = true)}>
 			<Icon name="filter" size={18} />
 			<span>Filters</span>
-			{#if hasActiveFilters}
+			{#if hasActiveFilters && !searchQuery}
 				<span class="filter-badge"></span>
 			{/if}
 		</button>
@@ -400,21 +415,6 @@
 			{/if}
 		</div>
 
-		<!-- Search -->
-		<div class="mobile-filter-section">
-			<h3>Search</h3>
-			<div class="mobile-search-wrapper">
-				<Icon name="search" size={16} />
-				<input
-					type="text"
-					class="mobile-search-input"
-					placeholder="Search by title or author..."
-					bind:value={searchQuery}
-					oninput={handleSearchInput}
-				/>
-			</div>
-		</div>
-
 		<!-- Era -->
 		<div class="mobile-filter-section">
 			<h3>Era</h3>
@@ -498,6 +498,9 @@
 
 	/* Mobile Bar */
 	.mobile-bar {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
 		margin-bottom: var(--space-4);
 	}
 
@@ -505,12 +508,16 @@
 		display: none;
 	}
 
+	.mobile-bar .mobile-search-wrapper {
+		flex: 1;
+	}
+
 	.mobile-filter-btn {
 		display: flex;
 		align-items: center;
 		gap: var(--space-2);
 		position: relative;
-		padding: var(--space-2) var(--space-4);
+		padding: var(--space-2) var(--space-3);
 		background: var(--color-bg-surface);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
@@ -519,6 +526,8 @@
 		font-size: var(--font-sm);
 		cursor: pointer;
 		transition: all var(--transition-fast);
+		white-space: nowrap;
+		flex-shrink: 0;
 	}
 
 	.mobile-filter-btn:hover {
