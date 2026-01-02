@@ -77,6 +77,12 @@
 		items = getShelfItems();
 	});
 
+	// Truncate text to max length with ellipsis
+	function truncate(text: string, maxLength: number): string {
+		if (text.length <= maxLength) return text;
+		return text.slice(0, maxLength - 3) + '...';
+	}
+
 	// Time formatting
 	function formatTimeAgo(timestamp: number): string {
 		const now = Date.now();
@@ -236,7 +242,7 @@
 								</div>
 								<div class="item-content">
 									<span class="item-title">{item.title}</span>
-									<span class="item-subtitle">{item.subtitle}</span>
+									<span class="item-subtitle" title={item.subtitle}>{truncate(item.subtitle, 140)}</span>
 								</div>
 								<div class="item-meta">
 									<span class="item-time">{formatTimeAgo(item.lastRead)}</span>
@@ -481,9 +487,10 @@
 		font-family: var(--font-ui);
 		font-size: var(--font-xs);
 		color: var(--color-text-muted);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		line-height: 1.4;
+		/* Allow wrapping for long titles */
+		white-space: normal;
+		word-wrap: break-word;
 	}
 
 	.item-meta {

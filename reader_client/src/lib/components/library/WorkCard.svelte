@@ -37,14 +37,6 @@
 		historical: 'Historical'
 	};
 
-	// Reading level as dot count (difficulty)
-	const readingLevelDots: Record<string, number> = {
-		inquirer: 1,
-		catechumen: 2,
-		faithful: 3,
-		scholar: 4
-	};
-
 	// Contributor role display names
 	const roleLabels: Record<string, string> = {
 		translator: 'Translated by',
@@ -54,7 +46,6 @@
 
 	const era = $derived(eraConfig[work.era] || { label: work.era, className: '' });
 	const workTypeLabel = $derived(workTypeLabels[work.work_type] || work.work_type);
-	const difficultyDots = $derived(readingLevelDots[work.reading_level] || 1);
 
 	// Check for saved reading position (reads fresh from localStorage)
 	const savedPosition = $derived(libraryStore.getWorkPosition(work.id));
@@ -164,14 +155,6 @@
 
 			<!-- Meta info -->
 			<div class="work-meta">
-				<span class="meta-item difficulty-indicator" title="Difficulty">
-					{#each Array(difficultyDots) as _}
-						<span class="difficulty-dot filled"></span>
-					{/each}
-					{#each Array(4 - difficultyDots) as _}
-						<span class="difficulty-dot"></span>
-					{/each}
-				</span>
 				<span class="meta-item">
 					<Icon name="list" size={14} />
 					{work.node_count} sections
@@ -367,23 +350,6 @@
 		font-size: var(--font-xs);
 		font-family: var(--font-ui);
 		color: var(--color-text-muted);
-	}
-
-	.difficulty-indicator {
-		gap: 3px;
-	}
-
-	.difficulty-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--color-bg-elevated);
-		border: 1px solid var(--color-border);
-	}
-
-	.difficulty-dot.filled {
-		background: var(--color-gold);
-		border-color: var(--color-gold);
 	}
 
 	.card-actions {

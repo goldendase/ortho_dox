@@ -14,7 +14,7 @@
 	import WorkCard from '$lib/components/library/WorkCard.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Sheet from '$lib/components/ui/Sheet.svelte';
-	import type { Era, WorkType, ReadingLevel, LibraryWorkSummary } from '$lib/api/types';
+	import type { Era, WorkType, LibraryWorkSummary } from '$lib/api/types';
 
 	let { data } = $props();
 
@@ -22,7 +22,6 @@
 	let searchQuery = $state('');
 	let selectedEra = $state<Era | null>(null);
 	let selectedType = $state<WorkType | null>(null);
-	let selectedLevel = $state<ReadingLevel | null>(null);
 	let selectedAuthor = $state<string | null>(null);
 
 	// UI state
@@ -30,7 +29,6 @@
 	let showMobileFilters = $state(false);
 	let eraDropdownOpen = $state(false);
 	let typeDropdownOpen = $state(false);
-	let levelDropdownOpen = $state(false);
 	let authorDropdownOpen = $state(false);
 	let authorSearchQuery = $state('');
 
@@ -51,14 +49,6 @@
 		historical: 'Historical'
 	};
 
-	// Reading levels with labels and dot count
-	const levelConfig: Record<ReadingLevel, { label: string; dots: number }> = {
-		inquirer: { label: 'Inquirer', dots: 1 },
-		catechumen: { label: 'Catechumen', dots: 2 },
-		faithful: { label: 'Faithful', dots: 3 },
-		scholar: { label: 'Scholar', dots: 4 }
-	};
-
 	// Read URL params on mount
 	$effect(() => {
 		if (browser) {
@@ -66,7 +56,6 @@
 			searchQuery = url.searchParams.get('q') || '';
 			selectedEra = (url.searchParams.get('era') as Era) || null;
 			selectedType = (url.searchParams.get('type') as WorkType) || null;
-			selectedLevel = (url.searchParams.get('level') as ReadingLevel) || null;
 			selectedAuthor = url.searchParams.get('author') || null;
 		}
 	});
@@ -87,9 +76,6 @@
 
 			if (selectedType) url.searchParams.set('type', selectedType);
 			else url.searchParams.delete('type');
-
-			if (selectedLevel) url.searchParams.set('level', selectedLevel);
-			else url.searchParams.delete('level');
 
 			if (selectedAuthor) url.searchParams.set('author', selectedAuthor);
 			else url.searchParams.delete('author');
@@ -113,7 +99,6 @@
 			if (searchQuery && !matchesSearch(work, searchQuery)) return false;
 			if (selectedEra && work.era !== selectedEra) return false;
 			if (selectedType && work.work_type !== selectedType) return false;
-			if (selectedLevel && work.reading_level !== selectedLevel) return false;
 			if (selectedAuthor && work.author !== selectedAuthor) return false;
 			return true;
 		});
@@ -128,7 +113,7 @@
 
 	// Check if any filters are active
 	let hasActiveFilters = $derived(
-		!!searchQuery || !!selectedEra || !!selectedType || !!selectedLevel || !!selectedAuthor
+		!!searchQuery || !!selectedEra || !!selectedType || !!selectedAuthor
 	);
 
 	// Handlers
@@ -144,12 +129,6 @@
 		updateUrl();
 	}
 
-	function selectLevel(level: ReadingLevel | null) {
-		selectedLevel = level;
-		levelDropdownOpen = false;
-		updateUrl();
-	}
-
 	function selectAuthor(author: string | null) {
 		selectedAuthor = author;
 		authorDropdownOpen = false;
@@ -160,7 +139,6 @@
 	function closeAllDropdowns() {
 		eraDropdownOpen = false;
 		typeDropdownOpen = false;
-		levelDropdownOpen = false;
 		authorDropdownOpen = false;
 	}
 
@@ -168,7 +146,6 @@
 		searchQuery = '';
 		selectedEra = null;
 		selectedType = null;
-		selectedLevel = null;
 		selectedAuthor = null;
 		updateUrl();
 	}
@@ -230,7 +207,6 @@
 					onclick={() => {
 						eraDropdownOpen = !eraDropdownOpen;
 						typeDropdownOpen = false;
-						levelDropdownOpen = false;
 						authorDropdownOpen = false;
 					}}
 				>
@@ -271,7 +247,6 @@
 					onclick={() => {
 						typeDropdownOpen = !typeDropdownOpen;
 						eraDropdownOpen = false;
-						levelDropdownOpen = false;
 						authorDropdownOpen = false;
 					}}
 				>
@@ -302,67 +277,6 @@
 			</div>
 		</div>
 
-		<!-- Difficulty filter (dropdown with dots) -->
-		<div class="filter-group filter-dropdown">
-			<span class="filter-label">Difficulty</span>
-			<div class="dropdown-wrapper">
-				<button
-					class="dropdown-trigger dropdown-trigger-dots"
-					class:active={!!selectedLevel}
-					onclick={() => {
-						levelDropdownOpen = !levelDropdownOpen;
-						eraDropdownOpen = false;
-						typeDropdownOpen = false;
-						authorDropdownOpen = false;
-					}}
-				>
-					{#if selectedLevel}
-						<span class="level-dots">
-							{#each Array(levelConfig[selectedLevel].dots) as _}
-								<span class="dot filled"></span>
-							{/each}
-						</span>
-					{:else}
-						<span class="level-dots">
-							{#each Array(4) as _}
-								<span class="dot"></span>
-							{/each}
-						</span>
-					{/if}
-					<Icon name="chevron-down" size={14} />
-				</button>
-
-				{#if levelDropdownOpen}
-					<div class="dropdown-menu dropdown-menu-dots">
-						<button
-							class="dropdown-option"
-							class:selected={!selectedLevel}
-							onclick={() => selectLevel(null)}
-						>
-							<span class="level-dots">
-								{#each Array(4) as _}
-									<span class="dot"></span>
-								{/each}
-							</span>
-						</button>
-						{#each Object.entries(levelConfig) as [value, config]}
-							<button
-								class="dropdown-option"
-								class:selected={selectedLevel === value}
-								onclick={() => selectLevel(value as ReadingLevel)}
-							>
-								<span class="level-dots">
-									{#each Array(config.dots) as _}
-										<span class="dot filled"></span>
-									{/each}
-								</span>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		</div>
-
 		<!-- Author filter (dropdown with search) -->
 		<div class="filter-group filter-dropdown">
 			<span class="filter-label">Author</span>
@@ -374,7 +288,6 @@
 						authorDropdownOpen = !authorDropdownOpen;
 						eraDropdownOpen = false;
 						typeDropdownOpen = false;
-						levelDropdownOpen = false;
 					}}
 				>
 					{selectedAuthor || 'All Authors'}
@@ -528,21 +441,6 @@
 				<option value="">All Types</option>
 				{#each Object.entries(typeLabels) as [value, label]}
 					<option value={value}>{label}</option>
-				{/each}
-			</select>
-		</div>
-
-		<!-- Difficulty -->
-		<div class="mobile-filter-section">
-			<h3>Difficulty</h3>
-			<select
-				class="mobile-select"
-				value={selectedLevel || ''}
-				onchange={(e) => selectLevel((e.currentTarget.value as ReadingLevel) || null)}
-			>
-				<option value="">All Levels</option>
-				{#each Object.entries(levelConfig) as [value, config]}
-					<option value={value}>{config.label}</option>
 				{/each}
 			</select>
 		</div>
